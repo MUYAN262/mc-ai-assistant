@@ -172,7 +172,7 @@ function purchase (pl, mins) {
 }
 
 // ---------- 反作弊：助手动作白名单 ----------
-const ALLOWED_SIM = ['simulateMoveTo', 'simulateLookAt', 'simulateStopMoving', 'simulateJump', 'simulateSneak']
+const ALLOWED_SIM = ['simulateMoveTo', 'simulateNavigateTo', 'simulateLookAt', 'simulateStopMoving', 'simulateJump', 'simulateSneak']
 const FORBIDDEN_HINT = /(give|gamemode|setblock|fill|summon|effect|enchant|\bxp\b|clear|kill|op\b|deop|sethealth|teleport|tp\b)/i
 let simCallCount = 0
 function safeSim (sp, method, args) {
@@ -335,13 +335,94 @@ function moveToPos (sp, x, y, z) {
   } catch (e) { audit('GUARD', '动作执行失败 simulateMoveTo: ' + e.message); return false }
 }
 
+// ---------- 寻路：simulateNavigateTo 走原版寻路器（绕墙、跳坑、下台阶） ----------
+// LSE 0.22.4 的绑定形态没文档，按顺序试，成功一次就缓存；全失败才退回直线移动。
+const NAV_FORMS = [
+  function (sp, fp, speed) { return sp.simulateNavigateTo(fp, speed) },
+  function (sp, fp, speed) { return sp.simulateNavigateTo(fp) },
+  function (sp, fp, speed) { return sp.simulateNavigateTo(fp, speed, true) }
+]
+let navForm = -1 // -1 未探测 / >=0 可用形态
+let navBroken = false
+let lastNoPathLog = 0
+
+function navTo (sp, x, y, z) {
+  if (navBroken) return moveToPos(sp, x, y, z)
+  const speed = Number(CFG.limits.moveSpeed) || 0.9
+  const mk = function () {
+    const fp = sp.pos
+    fp.x = x; fp.y = y; fp.z = z
+    return fp
+  }
+  const order = navForm >= 0 ? [navForm].concat([0, 1, 2].filter(function (i) { return i !== navForm })) : [0, 1, 2]
+  const errs = []
+  for (let k = 0; k < order.length; k++) {
+    const i = order[k]
+    try {
+      const r = NAV_FORMS[i](sp, mk(), speed)
+      simCallCount++
+      const plen = r && r.path ? r.path.length : -1
+      if (r === true || r === undefined || plen > 0) {
+        if (navForm !== i) { navForm = i; audit('NAV', '原版寻路可用（simulateNavigateTo 形态 ' + i + '，速度 ' + speed + '）') }
+        return true
+      }
+      errs.push('形态' + i + ' path=' + plen)
+    } catch (e) {
+      errs.push('形态' + i + ' ' + (e && e.message ? e.message : String(e)))
+    }
+  }
+  if (navForm < 0 && errs.length === order.length && errs.join('').indexOf('path=') < 0) {
+    navBroken = true
+    audit('NAV', 'simulateNavigateTo 全部报错，停用寻路 | ' + errs.join(' || '))
+  } else if (now() - (lastNoPathLog || 0) > 30000) {
+    lastNoPathLog = now()
+    audit('NAV', '这次没找到路，先直线走 | ' + errs.join(' || '))
+  }
+  return moveToPos(sp, x, y, z)
+}
+
+// 诊断：让常驻助手走一段（默认斜前方 24/12 格），每秒采样位置写审计
+function sp2pos (sp, x, y, z) {
+  const fp = sp.pos
+  fp.x = x; fp.y = y; fp.z = z
+  return fp
+}
+
+function navSelfTest (reply) {
+  const item = resident && resident.sp ? resident : null
+  if (!item) { reply('常驻助手不在场'); return }
+  let p
+  try { p = item.sp.pos } catch (e) { reply('读不到位置: ' + e.message); return }
+  const tx = Math.floor(p.x) + 16
+  const ty = Math.floor(p.y)
+  const tz = Math.floor(p.z)
+  item.mode = 'goto'
+  item.target = { x: tx, y: ty, z: tz }
+  item.stall = 0
+  item.navAt = 0
+  const ok = navTo(item.sp, tx, ty, tz)
+  item.navAt = now()
+  audit('NAVTEST', 'start from ' + Math.round(p.x) + ',' + Math.round(p.y) + ',' + Math.round(p.z) + ' to ' + tx + ',' + ty + ',' + tz + ' nav=' + ok)
+  reply('导航自测开始：' + Math.round(p.x) + ',' + Math.round(p.y) + ',' + Math.round(p.z) + ' -> ' + tx + ',' + ty + ',' + tz)
+  let n = 0
+  const iv = setInterval(function () {
+    n++
+    try {
+      const q = item.sp.pos
+      audit('NAVTEST', 't+' + n + 's pos=' + Math.round(q.x) + ',' + Math.round(q.y) + ',' + Math.round(q.z) + ' mode=' + item.mode + ' stall=' + (item.stall || 0))
+    } catch (e) {}
+    if (n >= 14) clearInterval(iv)
+  }, 1000)
+}
+
 function goTo (pl, item, x, y, z, label) {
   if (!item || !item.sp) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return false }
   if (y < -64 || y > 320) { pl.tell('§c[AI 助手] 目标高度超出范围'); return false }
   const t = clampTarget(item.sp.pos, x, y, z)
   item.mode = 'goto'
   item.target = { x: t.x, y: t.y, z: t.z }
-  moveToPos(item.sp, t.x + 0.5, t.y, t.z + 0.5)
+  navTo(item.sp, t.x + 0.5, t.y, t.z + 0.5)
+  item.navAt = now()
   pl.tell('§a[AI 助手] ' + item.name + ' 正' + (label || '走过去') + ' → ' + t.x + ' ' + t.y + ' ' + t.z +
     (t.clamped ? '§7（超出 ' + (Number(CFG.limits.maxMoveDistance) || 48) + ' 格，已截断到能走到的位置）' : ''))
   audit('MOVE', (label || 'goto') + ' -> ' + t.x + ',' + t.y + ',' + t.z + ' for ' + pl.realName)
@@ -541,7 +622,10 @@ setInterval(() => {
             if (owner2) owner2.tell('§c[AI 助手] ' + item.name + ' 被挡住了，走不到那里')
             continue
           }
-          moveToPos(item.sp, item.target.x + 0.5, spPos.y, item.target.z + 0.5)
+          const navReady = navBroken ? true : (now() - (item.navAt || 0) >= 2500)
+          if (navReady) {
+            if (navTo(item.sp, item.target.x + 0.5, spPos.y, item.target.z + 0.5)) item.navAt = now()
+          }
         }
       } catch (e) {}
       continue
@@ -557,7 +641,10 @@ setInterval(() => {
       const dz = pPos.z - spPos.z
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (dist > CFG.limits.followStopDistance) {
-        moveToPos(item.sp, pPos.x, pPos.y, pPos.z)
+        const followReady = navBroken ? true : (now() - (item.navAt || 0) >= 2000)
+        if (followReady) {
+          if (navTo(item.sp, pPos.x, pPos.y, pPos.z)) item.navAt = now()
+        }
       } else {
         safeSim(item.sp, 'simulateLookAt', [pl])
       }
@@ -801,6 +888,10 @@ cmdAdmin.setCallback((_cmd, origin, output, res) => {
     reply((r.ok ? 'OK ' : 'FAIL ') + r.msg)
     return
   }
+  if (action === 'navtest') {
+    navSelfTest(reply)
+    return
+  }
   if (action === 'selftest') {
     const problems = []
     const notes = []
@@ -839,7 +930,7 @@ cmdAdmin.setCallback((_cmd, origin, output, res) => {
       : ('PASS: 护栏完整，白名单 ' + ALLOWED_SIM.length + ' 项；' + notes.join('；')))
     return
   }
-  reply('用法: /aiadmin status|grant <玩家> <分钟>|spawn <玩家>|dismiss <玩家>|selftest')
+  reply('用法: /aiadmin status|grant <玩家> <分钟>|spawn <玩家>|dismiss <玩家>|rename <新名>|navtest|selftest')
 })
 // 授权：aigrant <玩家> <分钟>
 const cmdGrant = mc.newCommand('aigrant', '给玩家增加 AI 助手服务时长', PermType.GameMasters)
@@ -958,4 +1049,4 @@ if (CFG.resident.enabled) {
   mc.listen('onJoin', function () { try { ensureResident() } catch (e) {} })
   audit('RESIDENT', '常驻模式已启用：' + residentName() + '，免费聊天=' + CFG.resident.freeChat + '，可指挥=' + CFG.resident.allowMove)
 }
-audit('START', 'ai-assistant v1.2.0 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
+audit('START', 'ai-assistant v1.3.0 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
