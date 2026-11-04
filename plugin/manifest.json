@@ -1,0 +1,13 @@
+{
+  "entry": "ai-assistant.js",
+  "name": "ai-assistant",
+  "type": "lse-nodejs",
+  "author": "dsh",
+  "description": "付费 AI 助手：可召唤、跟随、聊天答疑，内置反作弊护栏",
+  "version": "1.2.0",
+  "dependencies": [
+    {
+      "name": "legacy-script-engine-nodejs"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# 运行时数据（含玩家名、余额、服务时长）
+data/
+logs/
+*.log
+
+# 密钥与线上配置
+*.key
+llm.key
+plugin/config.json
+qqmcbridge-mod/config.json
+
+# 依赖与系统
+node_modules/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 构建产物
+*.zip
+dist/

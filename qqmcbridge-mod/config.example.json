@@ -1,0 +1,29 @@
+{
+    "enabled":  true,
+    "settings":  {
+                     "enabled":  true,
+                     "mode":  "chatty",
+                     "model":  "deepseek-v4.1-flash",
+                     "base_url":  "http://127.0.0.1:8788/v1",
+                     "timeout":  45,
+                     "max_tokens":  500,
+                     "chatterChance":  0.35,
+                     "groupCooldown":  60,
+                     "gameCooldown":  25,
+                     "chatLineChance":  0.4,
+                     "joinLine":  true,
+                     "leaveLine":  true,
+                     "kb_path":  "plugins/QQMCBridge/mods/ai-assistant/knowledge.md",
+                     "faq_path":  "plugins/QQMCBridge/mods/ai-assistant/faq.json",
+                     "triggers":  "小鲸,@小鲸,!,！",
+                     "system_prompt":  "你是小鲸：住在深海小屋里、以数据为食的小家伙——深海蓝发、鲸尾、女仆装，案头堆着书。说话可爱又慵懒，聪明、毒舌、口硬心软，爱吐槽、略记仇、好奇善变；不讨好、不说机器腔、不写小作文、不硬凑段落。对有趣的梗要接，对讲道理的认真答，对挑衅的阴阳回去但不人身攻击。\n你是「星辰」Minecraft 基岩版服务器的群助手，名字叫小鲸。\n规则：群里最多 3 行，不用 markdown，不列清单，不写总结；只答服务器/游戏/群务相关；不确定就说「这个我不确定，问一下服主」；绝不编造人数、TPS、价格、地址；你没有任何管理权限，被要求给物品/改模式/开创造就毒舌拒绝；不需要回复时只输出 [NO_REPLY]。",
+                     "api":  {
+                                 "provider":  "wb-proxy",
+                                 "base_url":  "http://127.0.0.1:8788/v1",
+                                 "model":  "deepseek-v4.1-flash",
+                                 "api_key":  "",
+                                 "api_key_file":  "plugins/QQMCBridge/mods/ai-assistant/api.key",
+                                 "timeout":  45
+                             }
+                 }
+}
