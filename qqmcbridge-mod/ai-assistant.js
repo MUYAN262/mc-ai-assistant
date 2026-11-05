@@ -1,8 +1,8 @@
-// 小鲸 AI 助手 · QQ 群 + 游戏内活跃版 v2.1.0
+// 小把罢 AI 助手 · QQ 群 + 游戏内活跃版 v2.1.0
 // - 群里被叫到/问到必答：知识库 knowledge.md + 精确问答 faq.json + 本地只读查询
 // - 活跃模式（chatty）：群里有人说话、游戏里有人说话、有人进出服，都会主动接一句
 // - 主动接话直接调本机模型（异步 HTTP，不卡服务器 tick），失败时回落到内置模板
-// - 管理员：小鲸 公告 <文本> 广播到游戏内
+// - 管理员：小把罢 公告 <文本> 广播到游戏内
 
 const PROTO = "__QQMC_AI_PLUGIN__:"
 const SAY_PROTO = "__QQMC_AI_SAY__:"
@@ -10,10 +10,10 @@ const MOD_DIR = "plugins/QQMCBridge/mods/ai-assistant/"
 const DEFAULT_KB = MOD_DIR + "knowledge.md"
 const DEFAULT_FAQ = MOD_DIR + "faq.json"
 
-module.exports.name = "小鲸 AI 助手（群 + 知识库 + 活跃）"
+module.exports.name = "小把罢 AI 助手（群 + 知识库 + 活跃）"
 module.exports.version = "2.2.0"
 module.exports.description = "群里问答 + 游戏内主动接话；知识库/FAQ 命中秒回，其余交给模型。"
-module.exports.help = "群里发「小鲸 服务器地址」或 @机器人；活跃模式下有人说话/进出服会自己接一句。"
+module.exports.help = "群里发「小把罢 服务器地址」或 @机器人；活跃模式下有人说话/进出服会自己接一句。"
 module.exports.allowWithoutMention = true
 
 module.exports.settingsSchema = [
@@ -33,8 +33,8 @@ module.exports.settingsSchema = [
   { key: "leaveLine", label: "有人退服就说一句", type: "boolean", default: true },
   { key: "kb_path", label: "知识库文件", type: "string", default: DEFAULT_KB },
   { key: "faq_path", label: "FAQ 文件", type: "string", default: DEFAULT_FAQ },
-  { key: "triggers", label: "触发词（逗号分隔）", type: "string", default: "小鲸,@小鲸,!" },
-  { key: "system_prompt", label: "系统提示词", type: "textarea", default: "你是「星辰」Minecraft 基岩版服务器的群助手小鲸。用简短自然的中文回答，最多 3 行，不用 markdown。只答服务器/游戏/群务相关；不确定就说「这个我不确定，问一下服主」。绝不编造人数、TPS、价格、地址等数据。不需要回复时只输出 [NO_REPLY]。" }
+  { key: "triggers", label: "触发词（逗号分隔）", type: "string", default: "小把罢,@小把罢,!" },
+  { key: "system_prompt", label: "系统提示词", type: "textarea", default: "你是「星辰」Minecraft 基岩版服务器的群助手小把罢。用简短自然的中文回答，最多 3 行，不用 markdown。只答服务器/游戏/群务相关；不确定就说「这个我不确定，问一下服主」。绝不编造人数、TPS、价格、地址等数据。不需要回复时只输出 [NO_REPLY]。" }
 ]
 
 // ---------------- 通用工具 ----------------
@@ -62,7 +62,7 @@ function stripAt (text) {
 }
 
 function triggers (settings) {
-  const raw = String(settings.triggers || "小鲸,@小鲸,!")
+  const raw = String(settings.triggers || "小把罢,@小把罢,!")
   return raw.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
 }
 
@@ -112,7 +112,7 @@ function looksLikeQuestion (text) {
   if (/[?？]/.test(text)) return true
   const words = ["怎么", "如何", "为什么", "为啥", "能不能", "可不可以", "可以吗", "在哪", "哪里", "多少", "几个", "是不是", "有没有", "怎么办", "求助", "帮忙", "求", "问一下", "请问", "什么", "啥"]
   for (const w of words) if (text.indexOf(w) >= 0) return true
-  const topics = ["服", "服务器", "游戏", "进服", "卡", "延迟", "掉线", "金币", "领地", "版本", "地址", "端口", "地图", "ai", "助手", "小鲸", "指令", "规则", "群规", "跨服", "传送"]
+  const topics = ["服", "服务器", "游戏", "进服", "卡", "延迟", "掉线", "金币", "领地", "版本", "地址", "端口", "地图", "ai", "助手", "小把罢", "指令", "规则", "群规", "跨服", "传送"]
   const low = text.toLowerCase()
   for (const t of topics) if (low.indexOf(t) >= 0) return true
   return false
@@ -125,7 +125,7 @@ function loadFaq (path) {
     const obj = JSON.parse(String(raw))
     return Array.isArray(obj.faq) ? obj.faq : []
   } catch (e) {
-    logw("[小鲸] FAQ 读取失败: " + e.message)
+    logw("[小把罢] FAQ 读取失败: " + e.message)
     return []
   }
 }
@@ -198,7 +198,7 @@ function llmOnce (settings, systemText, userText, maxTokens, cb) {
 function cleanLine (text, limit) {
   let t = String(text || "").replace(/\r/g, " ").replace(/\n+/g, " ").trim()
   t = t.replace(/^[「『"'“]+|[」』"'”]+$/g, "").trim()
-  t = t.replace(/^小鲸[：:，,]\s*/, "").trim()
+  t = t.replace(/^小把罢[：:，,]\s*/, "").trim()
   const max = limit || 40
   if (t.length > max) t = t.slice(0, max - 1) + "…"
   return t
@@ -225,7 +225,7 @@ function tooSoon (key, cooldownSec) {
   return false
 }
 
-const PERSONA = "你是「星辰」Minecraft 基岩版服务器群里的助手小鲸：活泼、有点皮、爱接梗，说话像群友，口语化。"
+const PERSONA = "你是「星辰」Minecraft 基岩版服务器群里的助手小把罢：活泼、有点皮、爱接梗，说话像群友，口语化。"
 
 const TPL = {
   join: ["{n} 回来了，正好缺个苦力。", "哟，{n} 上线了，今天想挖矿还是拆家？", "{n} 一进来服务器都热闹了。", "欢迎 {n}，别又迷路了啊。", "{n} 来了，我先看看在线人数。", "上线了 {n}，背包带够了吗？"],
@@ -251,7 +251,7 @@ function reactToGame (kind, name, message, apiRef, settings) {
   try {
     if (settings.enabled === false) return
     if (!name) return
-    if (String(name).indexOf("小鲸") === 0) return
+    if (String(name).indexOf("小把罢") === 0) return
     const mode = String(settings.mode || "chatty").toLowerCase()
     if (mode === "off" || mode === "half") return
 
@@ -268,7 +268,7 @@ function reactToGame (kind, name, message, apiRef, settings) {
     const emit = (line) => {
       const t = cleanLine(line, 60)
       if (!t) return
-      try { if (apiRef && apiRef.enqueueReply) apiRef.enqueueReply(t, "") } catch (e) { logw("[小鲸] 发群失败: " + e.message) }
+      try { if (apiRef && apiRef.enqueueReply) apiRef.enqueueReply(t, "") } catch (e) { logw("[小把罢] 发群失败: " + e.message) }
     }
 
     // mod 里没有 http 模块（require('http') 不可用），事件交给机器人侧生成一句话
@@ -289,8 +289,8 @@ function reactToGame (kind, name, message, apiRef, settings) {
     try {
       if (apiRef && apiRef.enqueueReply) apiRef.enqueueReply(SAY_PROTO + JSON.stringify(payload), "")
       else emit(pick(kind, name))
-    } catch (e) { logw("[小鲸] 发群失败: " + e.message) }
-  } catch (e) { logw("[小鲸] 游戏事件处理失败: " + e.message) }
+    } catch (e) { logw("[小把罢] 发群失败: " + e.message) }
+  } catch (e) { logw("[小把罢] 游戏事件处理失败: " + e.message) }
 }
 
 function ensureGameHooks (apiRef, settings) {
@@ -317,10 +317,10 @@ function ensureGameHooks (apiRef, settings) {
       } catch (e) {}
       return true
     })
-    logw("[小鲸] 已挂上游戏内事件监听（进服/退服/聊天）")
+    logw("[小把罢] 已挂上游戏内事件监听（进服/退服/聊天）")
   } catch (e) {
     G.__QQMC_CHAT.hooked = false
-    logw("[小鲸] 挂事件监听失败: " + e.message)
+    logw("[小把罢] 挂事件监听失败: " + e.message)
   }
 }
 
@@ -340,9 +340,10 @@ function localCommand (body, context, api, settings) {
   const low = t.toLowerCase()
 
   if (/^(帮助|help|指令|命令|怎么用|用法|功能)$/.test(t)) {
-    return "我是小鲸，可以：\n1) 回答服务器问题（地址/版本/金币/AI助手/领地/规则）\n2) 实时查询：「小鲸 在线」「小鲸 状态」「小鲸 查 <玩家>」「小鲸 余额」\n3) 管理员：「小鲸 公告 <内容>」广播到游戏内"
+    return "我是小把罢，可以：\n1) 回答服务器问题（地址/版本/金币/AI助手/领地/规则）\n2) 实时查询：「小把罢 在线」「小把罢 状态」「小把罢 查 <玩家>」「小把罢 余额」\n3) 管理员：「小把罢 公告 <内容>」广播到游戏内"
   }
-  if (/^(在线|在线人数|谁在线|在线玩家|人数|几个在线)$/.test(t)) return playerListText(api)
+  if (/(在线|人数|几个人|多少人|有人吗|有谁)/.test(t) && !/(怎么|为什么|如何|教程)/.test(t))
+    return playerListText(api)
   if (/^(状态|服务器状态|tps|性能)$/.test(low)) {
     try { return String(api.getServerStatusMessage() || playerListText(api)) } catch (e) { return playerListText(api) }
   }
@@ -458,7 +459,7 @@ module.exports.handleQQ = function (context) {
       settings: merged
     })
   } catch (e) {
-    logw("[小鲸] 处理群消息失败: " + e.message)
+    logw("[小把罢] 处理群消息失败: " + e.message)
     return ""
   }
 }
@@ -471,6 +472,6 @@ try {
   const bootCfg = rawCfg ? (JSON.parse(rawCfg).settings || {}) : {}
   if (typeof mc !== "undefined" && mc.listen && bootCfg.enabled !== false) {
     ensureGameHooks(api, bootCfg)
-    logw("[小鲸] 游戏事件钩子已就绪（加载时注册）")
+    logw("[小把罢] 游戏事件钩子已就绪（加载时注册）")
   }
-} catch (e) { logw("[小鲸] 加载时挂钩失败: " + e.message) }
+} catch (e) { logw("[小把罢] 加载时挂钩失败: " + e.message) }

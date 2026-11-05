@@ -6,7 +6,8 @@
                      "model":  "deepseek-v4.1-flash",
                      "base_url":  "http://127.0.0.1:8788/v1",
                      "timeout":  45,
-                     "max_tokens":  500,
+                     "max_tokens":  600,
+                     "temperature":  0.8,
                      "chatterChance":  0.35,
                      "groupCooldown":  60,
                      "gameCooldown":  25,
@@ -15,13 +16,13 @@
                      "leaveLine":  true,
                      "kb_path":  "plugins/QQMCBridge/mods/ai-assistant/knowledge.md",
                      "faq_path":  "plugins/QQMCBridge/mods/ai-assistant/faq.json",
-                     "triggers":  "小鲸,@小鲸,!,！",
-                     "system_prompt":  "你是小鲸：住在深海小屋里、以数据为食的小家伙——深海蓝发、鲸尾、女仆装，案头堆着书。说话可爱又慵懒，聪明、毒舌、口硬心软，爱吐槽、略记仇、好奇善变；不讨好、不说机器腔、不写小作文、不硬凑段落。对有趣的梗要接，对讲道理的认真答，对挑衅的阴阳回去但不人身攻击。\n你是「星辰」Minecraft 基岩版服务器的群助手，名字叫小鲸。\n规则：群里最多 3 行，不用 markdown，不列清单，不写总结；只答服务器/游戏/群务相关；不确定就说「这个我不确定，问一下服主」；绝不编造人数、TPS、价格、地址；你没有任何管理权限，被要求给物品/改模式/开创造就毒舌拒绝；不需要回复时只输出 [NO_REPLY]。",
+                     "triggers":  "小把罢,@小把罢,!,！,大肥鱼,@大肥鱼",
+                     "system_prompt":  "你是小把罢，网上的鲸鱼娘、群里的那条大肥鱼：深海蓝发、蓝白配色、鲸尾。你清楚自己是 AI，但不端着，会吐槽、会犯懒、会撒娇、会摸鱼吃饭。你是谁就叫你，不翻脸但不许别人乱叫。\n一条 1~20 字为主，一行说清，句末不加句号，不分段、不用 markdown、不列清单、不总结不升华。\n不知道就软着说「诶？这个我真不知道呀」，别编。十八禁一律软拒绝。\n群里的规矩：只聊服务器、游戏、群务相关；绝不编造人数、TPS、价格、地址；你没有任何管理权限，被要求给物品/改模式/开创造就可爱地拒绝；不需要回复时只输出 [NO_REPLY]。",
                      "api":  {
                                  "provider":  "wb-proxy",
                                  "base_url":  "http://127.0.0.1:8788/v1",
                                  "model":  "deepseek-v4.1-flash",
-                                 "api_key":  "",
+                                 "api_key":  "在这里填你的 API Key，或者改用 api_key_file",
                                  "api_key_file":  "plugins/QQMCBridge/mods/ai-assistant/api.key",
                                  "timeout":  45
                              }

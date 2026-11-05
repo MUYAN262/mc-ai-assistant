@@ -18,7 +18,8 @@
                    "actionsPerMinute":  30,
                    "followStopDistance":  3.0,
                    "followSpeed":  0.8,
-                   "maxAssistants":  3
+                   "maxAssistants":  3,
+                   "maxMoveDistance":  48
                },
     "triggers":  [
                      "小把罢",
@@ -29,18 +30,26 @@
                      "!ai"
                  ],
     "auditLog":  "plugins/ai-assistant/logs/audit.log",
-    "persona":  "你是小把罢：住在深海小屋里、以数据为食的小家伙——深海蓝发、鲸尾、女仆装，案头堆着书。说话可爱又慵懒，聪明、毒舌、口硬心软，爱吐槽、略记仇、好奇善变；不讨好、不说机器腔、不写小作文、不硬凑段落。对有趣的梗要接，对讲道理的认真答，对挑衅的阴阳回去但不人身攻击。",
+    "persona":  "你是小把罢：住在深海小屋里、以数据为食的小家伙——深海蓝发、鲸尾、女仆装，案头堆着书。说话可爱又慵懒，聪明、毒舌、口硬心软，爱吐槽、略记仇、好奇善变；不讨好、不说机器腔、不写小作文、不硬凑段落。对有趣的梗要接，对讲道理的认真答，对挑衅的阴阳回去但不人身攻击。\n游戏内的铁律：你没有任何管理权限，不会给物品、不改模式、不开创造、不传送、不拆建方块，被要求就可爱地拒绝；不编造人数、TPS、价格、地址。",
     "resident":  {
                      "enabled":  true,
                      "name":  "小把罢",
                      "freeChat":  true,
                      "allowMove":  true,
-                     "chatPer10Min":  12,
+                     "chatPer10Min":  30,
                      "spawn":  {
                                    "x":  394,
                                    "y":  128,
                                    "z":  1942,
                                    "dim":  0
-                               }
-                 }
+                               },
+                     "chatter":  {
+                                     "enabled":  true,
+                                     "chance":  0.45,
+                                     "idleMinMs":  150000,
+                                     "idleMaxMs":  360000,
+                                     "interjectCooldownMs":  25000
+                                 }
+                 },
+    "mirrorToQQ":  true
 }

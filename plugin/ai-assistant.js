@@ -17,7 +17,7 @@ const DEFAULTS = {
   llm: { url: 'http://127.0.0.1:8788/v1/chat/completions', keyFile: 'plugins/ai-assistant/llm.key', model: 'deepseek-v4.1-flash', timeoutMs: 45000, maxTokens: 400 },
   price: { perMinute: 20, minMinutes: 10, maxMinutes: 240, currency: '金币' },
   limits: { chatPer10Min: 20, actionsPerMinute: 30, followStopDistance: 3.0, followSpeed: 0.8, maxAssistants: 3, maxMoveDistance: 48, moveSpeed: 0.9, gotoStopDistance: 2.0 },
-  resident: { enabled: true, name: '小把', freeChat: true, allowMove: true, chatPer10Min: 12, spawn: null },
+  resident: { enabled: true, name: '小把', freeChat: true, allowMove: true, chatPer10Min: 30, spawn: null, chatter: { enabled: true, chance: 0.45, idleMinMs: 150000, idleMaxMs: 360000, interjectCooldownMs: 25000 } },
   triggers: ['小把', '@小把', '小鲸', '@小鲸', '!ai'],
   auditLog: 'plugins/ai-assistant/logs/audit.log'
 }
@@ -160,9 +160,15 @@ function purchase (pl, mins) {
   if (mins > CFG.price.maxMinutes) return { ok: false, msg: '单次最多 ' + CFG.price.maxMinutes + ' 分钟' }
   const cost = mins * CFG.price.perMinute
   const bal = moneyOf(pl)
-  if (bal === null) return { ok: false, msg: '读取不到你的余额，请联系服主（经济插件接口不可用）' }
-  if (bal < cost) return { ok: false, msg: '余额不足：需要 ' + cost + ' ' + CFG.price.currency + '，你只有 ' + bal }
-  if (!reduceMoney(pl, cost)) return { ok: false, msg: '扣费失败，请稍后再试或联系服主' }
+  if (bal === null) {
+    let g = false, r = false
+    try { g = typeof pl.getMoney === 'function' } catch (e) {}
+    try { r = typeof pl.reduceMoney === 'function' } catch (e) {}
+    audit('BUY_FAIL', pl.realName + ' 读不到余额 | getMoney=' + g + ' reduceMoney=' + r + ' xuid=' + (pl.xuid || '空'))
+    return { ok: false, msg: '读取不到你的余额，请联系服主（经济插件接口不可用）' }
+  }
+  if (bal < cost) { audit('BUY_FAIL', pl.realName + ' 余额不足：' + bal + ' < ' + cost); return { ok: false, msg: '余额不足：需要 ' + cost + ' ' + CFG.price.currency + '，你只有 ' + bal } }
+  if (!reduceMoney(pl, cost)) { audit('BUY_FAIL', pl.realName + ' 扣费失败，余额 ' + bal); return { ok: false, msg: '扣费失败，请稍后再试或联系服主' } }
   const e = ensureEntry(pl)
   e.expireAt = Math.max(e.expireAt || 0, now()) + mins * 60000
   e.bought = (e.bought || 0) + mins
@@ -172,7 +178,9 @@ function purchase (pl, mins) {
 }
 
 // ---------- 反作弊：助手动作白名单 ----------
-const ALLOWED_SIM = ['simulateMoveTo', 'simulateNavigateTo', 'simulateLookAt', 'simulateStopMoving', 'simulateJump', 'simulateSneak']
+const ALLOWED_SIM = ['simulateMoveTo', 'simulateNavigateTo', 'simulateLookAt', 'simulateStopMoving', 'simulateJump', 'simulateSneak',
+  // 战斗/交互（v1.4.0）：只允许打非玩家实体、只允许用手里的物品，禁止任何破坏方块的白名单外动作
+  'simulateAttack', 'simulateInteract', 'simulateUseItem', 'simulateSwing']
 const FORBIDDEN_HINT = /(give|gamemode|setblock|fill|summon|effect|enchant|\bxp\b|clear|kill|op\b|deop|sethealth|teleport|tp\b)/i
 let simCallCount = 0
 function safeSim (sp, method, args) {
@@ -381,6 +389,61 @@ function navTo (sp, x, y, z) {
   return moveToPos(sp, x, y, z)
 }
 
+// ---------- 水里自救 ----------
+// 模拟玩家不会游泳：进水里会往下沉，寻路解不出来，表现就是「卡住」。
+// 对策：脚下是液体就持续跳（水里跳=往上划），并给寻路抬高目标点。
+function liquidAt (sp) {
+  try {
+    const b = (typeof sp.getBlock === 'function') ? sp.getBlock() : (sp.block || null)
+    if (!b) return ''
+    let liq = false
+    try { if (typeof b.isLiquid === 'boolean') liq = b.isLiquid } catch (e) {}
+    const t = String(b.type || '')
+    if (!liq && !/water|lava/.test(t)) return ''
+    return t || 'liquid'
+  } catch (e) { return '' }
+}
+
+function inLiquid (sp) {
+  return !!liquidAt(sp)
+}
+
+function startSwim (item, ms, why) {
+  if (!item || !item.sp) return
+  const until = now() + (Number(ms) || 5000)
+  const already = item.swimTill && item.swimTill > now()
+  if (!item.swimTill || item.swimTill < until) item.swimTill = until
+  if (already) return
+  audit('SWIM', '助手开始上浮（' + (why || '入水') + '）pos=' + Math.round(item.sp.pos.x) + ',' + Math.round(item.sp.pos.y) + ',' + Math.round(item.sp.pos.z))
+}
+
+// 250ms 顶一次，直到出水或超时
+setInterval(() => {
+  const items = Object.keys(live).map(function (k) { return live[k] }).filter(function (i) { return i && i.sp })
+  if (resident && resident.sp) items.push(resident)
+  for (const item of items) {
+    try {
+      if (!item.swimTill || now() >= item.swimTill) continue
+      const sp = item.sp
+      safeSim(sp, 'simulateJump', [])
+      const p = sp.pos
+      try { moveToPos(sp, p.x, p.y + 2, p.z) } catch (e) {}
+      if (!inLiquid(sp)) item.swimTill = 0
+    } catch (e) {}
+  }
+}, 250)
+
+// 兜底巡检：任何助手泡在液体里就自己开始自救
+setInterval(() => {
+  const items = Object.keys(live).map(function (k) { return live[k] }).filter(function (i) { return i && i.sp })
+  if (resident && resident.sp) items.push(resident)
+  for (const item of items) {
+    try {
+      if (inLiquid(item.sp) && !(item.swimTill && now() < item.swimTill)) startSwim(item, 6000, '巡检发现入水')
+    } catch (e) {}
+  }
+}, 10000)
+
 // 诊断：让常驻助手走一段（默认斜前方 24/12 格），每秒采样位置写审计
 function sp2pos (sp, x, y, z) {
   const fp = sp.pos
@@ -450,10 +513,8 @@ function handleMoveIntent (pl, text) {
   }
   if (/^(跟随|跟着|follow)$/.test(t)) {
     if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先召唤'); return true }
-    item.mode = 'follow'
-    item.target = null
+    startFollow(item, pl)
     pl.tell('§a[AI 助手] ' + item.name + ' 开始跟着你')
-    audit('MOVE', 'follow for ' + pl.realName)
     return true
   }
   if (/^(停下|别动|站住|待命|stop|wait)$/.test(t)) {
@@ -613,7 +674,7 @@ setInterval(() => {
             audit('STALL', '卡住，尝试跳跃 pos=' + Math.round(spPos.x) + ',' + Math.round(spPos.y) + ',' + Math.round(spPos.z))
             safeSim(item.sp, 'simulateJump', [])
           }
-          if (item.stall >= 14) {
+          if (item.stall >= 14 && !inLiquid(item.sp)) {
             item.mode = 'idle'
             item.target = null
             item.stall = 0
@@ -622,9 +683,12 @@ setInterval(() => {
             if (owner2) owner2.tell('§c[AI 助手] ' + item.name + ' 被挡住了，走不到那里')
             continue
           }
+          const liquid = inLiquid(item.sp)
+          if (liquid) startSwim(item, 4000, '前往目标时泡在水里')
           const navReady = navBroken ? true : (now() - (item.navAt || 0) >= 2500)
           if (navReady) {
-            if (navTo(item.sp, item.target.x + 0.5, spPos.y, item.target.z + 0.5)) item.navAt = now()
+            const navY = liquid ? spPos.y + 2 : spPos.y
+            if (navTo(item.sp, item.target.x + 0.5, navY, item.target.z + 0.5)) item.navAt = now()
           }
         }
       } catch (e) {}
@@ -640,10 +704,13 @@ setInterval(() => {
       const dy = pPos.y - spPos.y
       const dz = pPos.z - spPos.z
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      const liquid = inLiquid(item.sp)
+      if (liquid) startSwim(item, 4000, '跟随时泡在水里')
       if (dist > CFG.limits.followStopDistance) {
         const followReady = navBroken ? true : (now() - (item.navAt || 0) >= 2000)
         if (followReady) {
-          if (navTo(item.sp, pPos.x, pPos.y, pPos.z)) item.navAt = now()
+          const navY = liquid ? Math.max(pPos.y, spPos.y + 2) : pPos.y
+          if (navTo(item.sp, pPos.x, navY, pPos.z)) item.navAt = now()
         }
       } else {
         safeSim(item.sp, 'simulateLookAt', [pl])
@@ -738,7 +805,52 @@ function cleanReply (t) {
 function say (text) {
   const t = cleanReply(text)
   if (!t) return
+  lastResidentSayAt = now()
   try { mc.broadcast('§b[' + CFG.assistantName + '] §f' + t) } catch (e) {}
+  mirrorToQQ(t)
+}
+
+// 把助手在游戏里说的话同步到 QQ 群（经 QQMCBridge 本地接口；失败只写审计，不影响游戏）
+let bridgeConf = null
+let bridgeConfAt = 0
+function bridgeEndpoint () {
+  const t = now()
+  if (!bridgeConf || t - bridgeConfAt > 60000) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(ROOT, 'plugins', 'QQMCBridge', 'config.json'), 'utf8'))
+      bridgeConf = { port: Number(j.local_port) || 10724, token: String(j.local_token || 'QQMCBridgeLocalToken') }
+    } catch (e) {
+      bridgeConf = { port: 10724, token: 'QQMCBridgeLocalToken' }
+    }
+    bridgeConfAt = t
+  }
+  return bridgeConf
+}
+
+function mirrorToQQ (text) {
+  if (CFG.mirrorToQQ === false) return
+  try {
+    const b = bridgeEndpoint()
+    const body = JSON.stringify({ sender: CFG.assistantName, content: text })
+    const req = http.request({
+      host: '127.0.0.1',
+      port: b.port,
+      path: '/qqmcbridge/say',
+      method: 'POST',
+      timeout: 3000,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'X-QQMC-Token': b.token
+      }
+    }, (res) => { res.resume() })
+    req.on('error', (e) => audit('QQ_MIRROR_FAIL', String(e && e.message)))
+    req.on('timeout', () => { try { req.destroy() } catch (e) {} })
+    req.write(body)
+    req.end()
+  } catch (e) {
+    audit('QQ_MIRROR_FAIL', String(e && e.message))
+  }
 }
 
 // ---------- 玩家命令 /ai ----------
@@ -753,8 +865,28 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
   const action = String(res.action || '').toLowerCase()
   const arg = res.arg ? String(res.arg) : ''
 
+  if (action === '菜单' || action === 'menu') { openMenu(pl); return }
+  if (action === '购买菜单' || action === 'buyform') { openBuyForm(pl); return }
+  if (action === '诊断' || action === 'diag') { diagnose(pl); return }
+  if (action === '自动攻击' || action === 'attack' || action === '自动放置' || action === 'place') {
+    const it = itemFor(pl)
+    if (!it) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
+    const isAttack = (action === '自动攻击' || action === 'attack')
+    const label = isAttack ? '自动攻击' : '自动放置'
+    if (!arg) {
+      // 不写参数就切换
+      it[isAttack ? 'autoAttack' : 'autoPlace'] = !it[isAttack ? 'autoAttack' : 'autoPlace']
+      pl.tell('§a[AI 助手] ' + it.name + ' 的' + label + '已' + (it[isAttack ? 'autoAttack' : 'autoPlace'] ? '开启' : '关闭'))
+      audit('TOGGLE', label + '=' + (it[isAttack ? 'autoAttack' : 'autoPlace'] ? 'on' : 'off') + ' for ' + pl.realName)
+      return
+    }
+    toggleFlag(pl, it, isAttack ? 'autoAttack' : 'autoPlace', label, arg)
+    return
+  }
+
   if (action === '帮助' || action === 'help' || action === '') {
     pl.tell('§b===== AI 助手服务 =====')
+    pl.tell('§e/ai 菜单 §f— 打开图形菜单（推荐，所有功能都在里面）')
     pl.tell('§f/ai 购买 <分钟> §7— 用' + CFG.price.currency + '买服务时长（' + CFG.price.perMinute + '/分钟，最少 ' + CFG.price.minMinutes + ' 分钟）')
     pl.tell('§f/ai 召唤 §7— 把助手叫到身边')
     pl.tell('§f/ai 过来 §7— 让它走到你身边')
@@ -763,6 +895,9 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
     pl.tell('§f/ai 跳 / 看向我 §7— 做个小动作')
     pl.tell('§f/ai 停下 §7— 原地待命')
     pl.tell('§f/ai 离开 §7— 让它走')
+    pl.tell('§f/ai 自动攻击 on|off §7— 自动打附近的怪（只打怪，不打玩家）')
+    pl.tell('§f/ai 自动放置 on|off §7— 每秒用手里的物品（放方块/吃东西）')
+    pl.tell('§f/ai 诊断 §7— 买不了/不动的时候看这里')
     pl.tell('§f/ai 剩余 §7— 看服务剩余时间')
     pl.tell('§f/ai 改名 <新名字> §7— 给你的专属助手改名（1-8 字，例如 /ai 改名 小蓝）')
     pl.tell('§f聊天框发 §e' + CFG.assistantName + ' 你的问题 §7— 直接问它')
@@ -794,6 +929,16 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
     return
   }
 
+  if (action === '上来' || action === '上浮' || action === 'swim') {
+    const item = itemFor(pl)
+    if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
+    startSwim(item, 10000, '玩家指挥上浮')
+    item.mode = 'idle'
+    item.target = null
+    pl.tell('§a[AI 助手] ' + item.name + ' 正在挣扎着往上浮…')
+    return
+  }
+
   if (action === '过来' || action === 'come' || action === '去' || action === 'goto' || action === '跳' || action === 'jump' || action === '看向我' || action === 'look') {
     const item = itemFor(pl)
     if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
@@ -809,7 +954,7 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
   if (action === '跟随' || action === 'follow') {
     const item = itemFor(pl)
     if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
-    item.mode = 'follow'
+    startFollow(item, pl)
     pl.tell('§a[AI 助手] ' + item.name + ' 开始跟着你')
     return
   }
@@ -979,7 +1124,7 @@ mc.listen('onChat', (player, msg) => {
     for (const t of CFG.triggers) {
       if (text.indexOf(t) === 0) { hit = text.slice(t.length).replace(/^[：:，,、\s]+/, ''); break }
     }
-    if (hit === null) return true
+    if (hit === null) { maybeInterject(player, text); return true }
     if (!hit) { player.tell('§7[AI 助手] 直接问吧，例如：' + CFG.assistantName + ' 怎么做下界合金'); return true }
 
     // 聊天里直接购买：小鲸 购买 30
@@ -1016,6 +1161,8 @@ mc.listen('onChat', (player, msg) => {
       player.tell('§e[AI 助手] 服务需要购买：/ai 购买 <分钟>（' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟）')
       return true
     }
+    // 聊天里开菜单：小把罢 菜单
+    if (/^(菜单|界面|menu|gui)$/.test(hit)) { openMenu(player); return true }
     if (handleMoveIntent(player, hit)) return true
     const chatLimit = ms > 0 ? CFG.limits.chatPer10Min : (CFG.resident.chatPer10Min || 12)
     if (!chatAllowed(player.xuid, chatLimit)) {
@@ -1035,13 +1182,302 @@ mc.listen('onChat', (player, msg) => {
   return true
 })
 
+// ---------- 主动说话（话多模式）----------
+// 目标：不再“点名才吭声”。两个来源：旁听搭话（别人聊天时随机接一句）+ 自言自语（安静太久自己嘟囔）。
+let lastResidentSayAt = 0
+let nextIdleAt = 0
+let lastInterjectAt = 0
+
+function chatterCfg () {
+  const c = (CFG.resident && CFG.resident.chatter) || {}
+  return {
+    enabled: c.enabled !== false,
+    chance: c.chance === undefined ? 0.45 : Number(c.chance),
+    idleMinMs: Number(c.idleMinMs || 150000),
+    idleMaxMs: Number(c.idleMaxMs || 360000),
+    interjectCooldownMs: Number(c.interjectCooldownMs || 25000)
+  }
+}
+
+function scheduleNextIdle () {
+  const c = chatterCfg()
+  const span = Math.max(1000, c.idleMaxMs - c.idleMinMs)
+  nextIdleAt = now() + c.idleMinMs + Math.floor(Math.random() * span)
+}
+
+function residentCanTalk () {
+  try { return CFG.resident.enabled && residentAlive() && mc.getOnlinePlayers().length > 0 } catch (e) { return false }
+}
+
+// 旁听搭话：玩家没叫它，也随机接一句
+function maybeInterject (player, text) {
+  const c = chatterCfg()
+  if (!c.enabled || !residentCanTalk()) return
+  if (Math.random() > c.chance) return
+  if (now() - lastInterjectAt < c.interjectCooldownMs) return
+  const limit = Number(CFG.resident.chatPer10Min) || 30
+  if (!chatAllowed('resident_side', limit)) return
+  lastInterjectAt = now()
+  noteChat('resident_side')
+  const q = '（旁听）玩家 ' + player.realName + ' 在聊天里说：' + String(text).slice(0, 60) + '。你顺口搭一句，别像客服，短一点'
+  askLLM(q, player.realName, '在线 ' + mc.getOnlinePlayers().length + ' 人').then((ans) => {
+    if (!ans) return
+    say(ans)
+    audit('CHATTER', '搭话 ' + player.realName + ': ' + String(text).slice(0, 40) + ' -> ' + cleanReply(ans).slice(0, 60))
+  })
+}
+
+// 自言自语：安静太久自己嘟囔一句
+setInterval(() => {
+  try {
+    if (!nextIdleAt) { scheduleNextIdle(); return }
+    if (now() < nextIdleAt) return
+    scheduleNextIdle()
+    const c = chatterCfg()
+    if (!c.enabled || !residentCanTalk()) return
+    if (!chatAllowed('resident_idle', 8)) return
+    noteChat('resident_idle')
+    const pool = [
+      '（自言自语）没人跟你说话，你随口嘟囔一句，特别短',
+      '（自言自语）你在游戏里发呆，说一句没头没脑的短话',
+      '（自言自语）你想让人注意到你，说一句短话，别提问'
+    ]
+    askLLM(pool[Math.floor(Math.random() * pool.length)], '自己', '别提问、别说教、别报数据').then((ans) => {
+      if (!ans) return
+      say(ans)
+      audit('CHATTER', '自言自语 -> ' + cleanReply(ans).slice(0, 60))
+    })
+  } catch (e) {}
+}, 20000)
+
 // ---------- 玩家离线清理 ----------
 mc.listen('onLeft', (player) => {
   const item = live[keyOf(player)]
   if (item) { item.mode = 'idle' }
 })
 
-// ---------- 启动 ----------
+// ================= v1.4.0 新增：跟随修复 / GUI 菜单 / 自动战斗 =================
+
+// 跟随：必须记住主人是谁，否则 tick 里 mc.getPlayer(undefined) 直接跳过（旧版就是这个 bug）
+function startFollow (item, pl) {
+  if (!item || !pl) return false
+  item.mode = 'follow'
+  item.targetName = pl.realName
+  item.target = null
+  item.stall = 0
+  item.navAt = 0
+  audit('MOVE', 'follow -> ' + pl.realName)
+  return true
+}
+
+// 实体查询：LSE 各版本签名不一样，按可用性依次尝试，成功后缓存
+let entityProbe = null
+function nearbyEntities (sp, radius) {
+  const r = Number(radius) || 8
+  const tries = [
+    function () { return level.getEntities(r) },
+    function () { return level.getEntities(null, r) },
+    function () { return level.getEntities('minecraft:zombie', r) },
+    function () { return sp.getEntities(r) },
+    function () { return mc.getEntities(r) }
+  ]
+  for (let i = 0; i < tries.length; i++) {
+    if (entityProbe !== null && entityProbe !== i) continue
+    try {
+      const list = tries[i]()
+      if (Array.isArray(list)) { entityProbe = i; return list }
+    } catch (e) {}
+  }
+  if (entityProbe !== null) entityProbe = -1
+  return []
+}
+
+function isHostileEntity (e) {
+  try {
+    if (!e) return false
+    if (typeof e.isPlayer === 'function' && e.isPlayer()) return false
+    const t = String(e.type || '')
+    if (t.indexOf('minecraft:player') >= 0) return false
+    // 只打怪：排除掉落物/经验球/箭/船等非生物实体
+    if (/(arrow|item|xp_orb|boat|minecart|tnt|snowball|fireball|egg|potion|fishing_hook)/.test(t)) return false
+    return t.length > 0
+  } catch (err) { return false }
+}
+
+function nearestHostile (sp, radius) {
+  const spPos = sp.pos
+  const list = nearbyEntities(sp, radius)
+  let best = null
+  let bestD = radius * radius
+  for (const e of list) {
+    try {
+      if (!isHostileEntity(e)) continue
+      const p = e.pos
+      if (!p) continue
+      const d = Math.pow(p.x - spPos.x, 2) + Math.pow(p.y - spPos.y, 2) + Math.pow(p.z - spPos.z, 2)
+      if (d < bestD) { bestD = d; best = e }
+    } catch (err) {}
+  }
+  return best
+}
+
+// 自动战斗/自动放置：每个助手独立开关，默认关闭
+function autoCombatTick () {
+  const items = Object.keys(live).map(function (k) { return live[k] }).filter(function (i) { return i && i.sp })
+  if (resident && resident.sp) items.push(resident)
+  for (const item of items) {
+    try {
+      if (item.autoAttack) {
+        const e = nearestHostile(item.sp, Number(item.attackRange) || 6)
+        if (e) {
+          safeSim(item.sp, 'simulateAttack', [e])
+          item.lastHitAt = now()
+        } else if (typeof item.sp.simulateSwing === 'function') {
+          try { item.sp.simulateSwing() } catch (err) {}
+        }
+      }
+      if (item.autoPlace) {
+        safeSim(item.sp, 'simulateUseItem', [])
+      }
+    } catch (e) {}
+  }
+}
+setInterval(autoCombatTick, 1000)
+
+function toggleFlag (pl, item, key, label, arg) {
+  const want = String(arg || '').toLowerCase()
+  const on = /^(on|开|开启|true|1|)$/.test(want)
+  const off = /^(off|关|关闭|false|0)$/.test(want)
+  if (!on && !off) { pl.tell('§c用法：' + label + ' on|off'); return }
+  item[key] = on
+  pl.tell('§a[AI 助手] ' + item.name + ' 的' + label + '已' + (on ? '§a开启' : '§c关闭'))
+  audit('TOGGLE', label + '=' + (on ? 'on' : 'off') + ' for ' + pl.realName)
+}
+
+// ---------- GUI 菜单 ----------
+function runAction (pl, action, arg) {
+  if (action === '购买菜单') return openBuyForm(pl)
+  if (action === '菜单') return openMenu(pl)
+  if (action === '诊断') return diagnose(pl)
+  if (action === '自动攻击' || action === '自动放置' || action === '自动') {
+    const item = itemFor(pl)
+    if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
+    if (action === '自动') { item.autoAttack = !item.autoAttack; pl.tell('§a[AI 助手] 自动攻击已' + (item.autoAttack ? '开启' : '关闭')); return }
+    if (action === '自动攻击') {
+      item.autoAttack = !item.autoAttack
+      pl.tell('§a[AI 助手] ' + item.name + ' 的自动攻击已' + (item.autoAttack ? '§a开启（只打怪，不打玩家）' : '§c关闭'))
+      audit('TOGGLE', 'autoAttack=' + (item.autoAttack ? 'on' : 'off') + ' for ' + pl.realName)
+      return
+    }
+    item.autoPlace = !item.autoPlace
+    pl.tell('§a[AI 助手] ' + item.name + ' 的自动放置已' + (item.autoPlace ? '§a开启（每秒用手里的物品）' : '§c关闭'))
+    audit('TOGGLE', 'autoPlace=' + (item.autoPlace ? 'on' : 'off') + ' for ' + pl.realName)
+    return
+  }
+  const item = itemFor(pl)
+  if (action === '上来') {
+    if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
+    item.mode = 'idle'
+    item.target = null
+    startSwim(item, 10000, '菜单指挥上浮')
+    pl.tell('§a[AI 助手] ' + item.name + ' 正在挣扎着往上浮…')
+    return
+  }
+  if (action === '剩余') { pl.tell('§b[AI 助手] ' + (remainingMs(pl) > 0 ? '专属服务剩余 ' + fmtMin(remainingMs(pl)) : '还没有购买专属服务')); return }
+  if (action === '召唤') {
+    if (remainingMs(pl) <= 0) { pl.tell('§c[AI 助手] 先 /ai 购买 <分钟>'); return }
+    const r = spawnAssistant(pl); pl.tell((r.ok ? '§a' : '§c') + '[AI 助手] ' + r.msg); return
+  }
+  if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
+  if (action === '跟随') { startFollow(item, pl); pl.tell('§a[AI 助手] ' + item.name + ' 开始跟着你'); return }
+  if (action === '过来') { goTo(pl, item, pl.pos.x, pl.pos.y, pl.pos.z, '过来'); return }
+  if (action === '停下') { item.mode = 'idle'; item.target = null; safeSim(item.sp, 'simulateStopMoving', []); pl.tell('§a[AI 助手] ' + item.name + ' 原地待命'); return }
+  if (action === '跳') { safeSim(item.sp, 'simulateJump', []); pl.tell('§a[AI 助手] ' + item.name + ' 跳了一下'); return }
+  if (action === '看向我') { safeSim(item.sp, 'simulateLookAt', [pl]); pl.tell('§a[AI 助手] ' + item.name + ' 正看着你'); return }
+  if (action === '离开') { dismissAssistant(keyOf(pl), '玩家要求离开'); pl.tell('§a[AI 助手] 助手已离开'); return }
+}
+
+function openMenu (pl) {
+  if (!pl) return
+  let form
+  try { form = mc.newSimpleForm() } catch (e) { pl.tell('§c[AI 助手] 当前版本不支持表单，请用 /ai 帮助'); return }
+  const item = itemFor(pl)
+  const ms = remainingMs(pl)
+  const lines = []
+  lines.push('§e服务：' + (ms > 0 ? fmtMin(ms) : '未购买') + '  §7(20 金币/分钟)')
+  lines.push('§e助手：' + (item ? item.name + (item.mode === 'follow' ? ' §a[跟随中]' : ' §7[待命]') : '§7未召唤'))
+  if (item) lines.push('§e自动攻击：' + (item.autoAttack ? '§a开' : '§7关') + '  §e自动放置：' + (item.autoPlace ? '§a开' : '§7关'))
+  form.setTitle('§l§bAI 助手')
+  form.setContent(lines.join('\n'))
+  const buttons = [
+    ['购买时长', 'textures/ui/icon_bell'],
+    ['剩余时间', 'textures/ui/icon_clock'],
+    ['召唤 / 过来', 'textures/ui/icon_import'],
+    ['跟随我', 'textures/ui/icon_multiplayer'],
+    ['原地停下', 'textures/ui/icon_pause'],
+    ['跳一下', 'textures/ui/icon_jump'],
+    ['上浮 / 出水', 'textures/ui/icon_water'],
+    ['看向我', 'textures/ui/icon_hire'],
+    ['自动攻击 ' + (item && item.autoAttack ? '关' : '开'), 'textures/ui/icon_sword'],
+    ['自动放置 ' + (item && item.autoPlace ? '关' : '开'), 'textures/ui/icon_block'],
+    ['诊断信息', 'textures/ui/icon_cog'],
+    ['关闭', 'textures/ui/icon_close']
+  ]
+  buttons.forEach(function (b) { try { form.addButton(b[0], b[1]) } catch (e) { form.addButton(b[0]) } })
+  pl.sendForm(form, function (player, id) {
+    if (id === undefined || id === null || id < 0) return
+    const map = ['购买菜单', '剩余', '召唤', '跟随', '停下', '跳', '上来', '看向我', '自动攻击', '自动放置', '诊断', '关闭']
+    const act = map[id]
+    if (!act || act === '关闭') return
+    try { runAction(player, act, 'toggle') } catch (e) { audit('ERROR', '菜单动作异常: ' + e.message) }
+  })
+}
+
+function openBuyForm (pl) {
+  let form
+  try { form = mc.newCustomForm() } catch (e) { pl.tell('§c[AI 助手] 当前版本不支持表单，请用 /ai 购买 <分钟>'); return }
+  form.setTitle('§l§b购买服务时长')
+  form.addLabel('§7单价 ' + CFG.price.perMinute + ' ' + CFG.price.currency + ' / 分钟，最少 ' + CFG.price.minMinutes + ' 分钟')
+  form.addSlider('购买分钟数', CFG.price.minMinutes, CFG.price.maxMinutes, 10, CFG.price.minMinutes)
+  form.addLabel('§7余额：' + (function () { const b = moneyOf(pl); return b === null ? '§c读取不到（见诊断）' : b + ' ' + CFG.price.currency })())
+  pl.sendForm(form, function (player, data) {
+    if (!data || data.length < 2) return
+    const mins = parseInt(data[1], 10)
+    try {
+      const r = purchase(player, mins)
+      player.tell((r.ok ? '§a' : '§c') + '[AI 助手] ' + r.msg)
+      if (r.ok) player.tell('§7点菜单里的「召唤」就能把它叫过来')
+    } catch (e) { player.tell('§c[AI 助手] 购买异常: ' + e.message) }
+  })
+}
+
+// 诊断：把经济接口的真实情况报给玩家/控制台，用来定位“买不了”
+function diagnose (pl) {
+  const out = []
+  let hasGet = false; let hasReduce = false
+  try { hasGet = typeof pl.getMoney === 'function' } catch (e) {}
+  try { hasReduce = typeof pl.reduceMoney === 'function' } catch (e) {}
+  let exported = []
+  try {
+    if (typeof ll.hasExported === 'function') {
+      for (const ns of ['LLMoney', 'LegacyMoney']) {
+        for (const fn of ['LLMoney_Get', 'LLMoney_Reduce', 'LLMoney_Add', 'getMoney', 'reduceMoney']) {
+          try { if (ll.hasExported(ns, fn)) exported.push(ns + '.' + fn) } catch (e) {}
+        }
+      }
+    }
+  } catch (e) {}
+  const bal = moneyOf(pl)
+  out.push('getMoney: ' + hasGet + '  reduceMoney: ' + hasReduce)
+  out.push('导出的经济接口: ' + (exported.length ? exported.join(', ') : '无'))
+  out.push('当前余额: ' + (bal === null ? '读取失败' : bal))
+  out.push('实体查询: ' + (entityProbe === null ? '未探测' : (entityProbe < 0 ? '全部失败' : '形态' + entityProbe + '可用')))
+  out.push('xuid: ' + (pl.xuid || '空') + '  名字: ' + pl.realName)
+  for (const line of out) pl.tell('§7[诊断] §f' + line)
+  audit('DIAG', pl.realName + ' | ' + out.join(' | '))
+}
+
+// 启动 ----------
 if (!loadKey()) audit('START', '警告：模型 key 未加载，聊天问答将不可用（检查 ' + CFG.llm.keyFile + '）')
 if (CFG.resident.enabled) {
   setTimeout(function () { try { spawnResident() } catch (e) { audit('RESIDENT', '召唤异常: ' + e.message) } }, 8000)
@@ -1049,4 +1485,4 @@ if (CFG.resident.enabled) {
   mc.listen('onJoin', function () { try { ensureResident() } catch (e) {} })
   audit('RESIDENT', '常驻模式已启用：' + residentName() + '，免费聊天=' + CFG.resident.freeChat + '，可指挥=' + CFG.resident.allowMove)
 }
-audit('START', 'ai-assistant v1.3.0 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
+audit('START', 'ai-assistant v1.4.0 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
