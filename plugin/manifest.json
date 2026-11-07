@@ -3,8 +3,8 @@
   "name": "ai-assistant",
   "type": "lse-nodejs",
   "author": "dsh",
-  "description": "付费 AI 助手：可召唤、寻路跟随、聊天答疑，内置反作弊护栏",
-  "version": "1.4.0",
+  "description": "付费/常驻 AI 助手：可召唤、跟随、聊天答疑、商店查价，内置反作弊护栏",
+  "version": "1.7.0",
   "dependencies": [
     {
       "name": "legacy-script-engine-nodejs"

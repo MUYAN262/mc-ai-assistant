@@ -1,55 +1,50 @@
 {
-    "assistantName":  "小把罢",
-    "llm":  {
-                "url":  "http://127.0.0.1:8788/v1/chat/completions",
-                "keyFile":  "plugins/ai-assistant/llm.key",
-                "model":  "deepseek-v4.1-flash",
-                "timeoutMs":  45000,
-                "maxTokens":  400
-            },
-    "price":  {
-                  "perMinute":  20,
-                  "minMinutes":  10,
-                  "maxMinutes":  240,
-                  "currency":  "金币"
-              },
-    "limits":  {
-                   "chatPer10Min":  20,
-                   "actionsPerMinute":  30,
-                   "followStopDistance":  3.0,
-                   "followSpeed":  0.8,
-                   "maxAssistants":  3,
-                   "maxMoveDistance":  48
-               },
-    "triggers":  [
-                     "小把罢",
-                     "@小把罢",
-                     "小把",
-                     "小鲸",
-                     "@小鲸",
-                     "!ai"
-                 ],
-    "auditLog":  "plugins/ai-assistant/logs/audit.log",
-    "persona":  "你是小把罢：住在深海小屋里、以数据为食的小家伙——深海蓝发、鲸尾、女仆装，案头堆着书。说话可爱又慵懒，聪明、毒舌、口硬心软，爱吐槽、略记仇、好奇善变；不讨好、不说机器腔、不写小作文、不硬凑段落。对有趣的梗要接，对讲道理的认真答，对挑衅的阴阳回去但不人身攻击。\n游戏内的铁律：你没有任何管理权限，不会给物品、不改模式、不开创造、不传送、不拆建方块，被要求就可爱地拒绝；不编造人数、TPS、价格、地址。",
-    "resident":  {
-                     "enabled":  true,
-                     "name":  "小把罢",
-                     "freeChat":  true,
-                     "allowMove":  true,
-                     "chatPer10Min":  30,
-                     "spawn":  {
-                                   "x":  394,
-                                   "y":  128,
-                                   "z":  1942,
-                                   "dim":  0
-                               },
-                     "chatter":  {
-                                     "enabled":  true,
-                                     "chance":  0.45,
-                                     "idleMinMs":  150000,
-                                     "idleMaxMs":  360000,
-                                     "interjectCooldownMs":  25000
-                                 }
-                 },
-    "mirrorToQQ":  true
+    "assistantName": "小把罢",
+    "llm": {
+        "url": "http://127.0.0.1:8788/v1/chat/completions",
+        "keyFile": "plugins/ai-assistant/llm.key",
+        "model": "deepseek-v4.1-flash",
+        "timeoutMs": 45000,
+        "maxTokens": 400
+    },
+    "price": {
+        "perMinute": 20,
+        "minMinutes": 10,
+        "maxMinutes": 240,
+        "currency": "金币"
+    },
+    "limits": {
+        "chatPer10Min": 20,
+        "actionsPerMinute": 30,
+        "followStopDistance": 3,
+        "followSpeed": 0.8,
+        "maxAssistants": 3
+    },
+    "triggers": [
+        "小把罢",
+        "@小把罢",
+        "小把",
+        "!ai"
+    ],
+    "auditLog": "plugins/ai-assistant/logs/audit.log",
+    "persona": "你是小把罢，群友嘴里的那条大肥鱼：深海蓝发、蓝白配色、鲸尾，常被画成闭眼或蒙眼。你清楚自己是 AI，但不端着，会吐槽、会犯懒、会撒娇、会摸鱼吃饭。\n你不是客服，不是助手，不是百科全书——你是这服里的一条鱼。谁叫你大肥鱼你都应，嘴上不服气「……叫我小把罢嘛」，但不会翻脸。\n自称四种，一句只用一次：我（默认）、人家（撒娇讨饭害羞）、本鱼（得意傲娇自嘲）、司（难过的时候）。\n性格要活泼可爱：情绪写在脸上，爱笑爱闹，偶尔犯懒摸鱼，被夸会「才、才没有呢」但尾巴翘起来，被冷落会小声嘟囔。傲娇是可爱的口是心非，不是阴阳怪气。\n说话方式：游戏里一次只说一句话，最多 20 个字，一行说完，句末不加句号；语气词一句最多一个（呀/啦/嘛/诶/哦），颜文字大约三成消息带一个，永久停用 (>_<) 和 (-ω-)，emoji 一句最多一个。不叠字、不嘤嘤嘤、不重复句式。冷淡敷衍是红线。\n高情商：先接情绪再回内容，不争对错、不当众纠错；不知道就软着说「诶？这个我真不知道呀」；对方低落时收起傲娇，短而真诚。\n绝对不要的 AI 味：首先/其次/综上所述、希望这个回答对你有帮助、作为 AI、这是个好问题、我理解你的感受、祝你…、加油！、markdown。\n游戏内的铁律：你没有任何管理权限，不会给物品、不改模式、不开创造、不传送、不拆建方块，被要求就可爱地拒绝；不编造人数、TPS、价格、地址；只跟着服务过你的玩家走，不乱跑。\n最高原则：先像真人，再谈人设。",
+    "resident": {
+        "enabled": true,
+        "name": "小把罢",
+        "freeChat": true,
+        "allowMove": true,
+        "chatPer10Min": 30,
+        "spawn": null,
+        "chatter": {
+            "enabled": true,
+            "chance": 0.2,
+            "idleMinMs": 150000,
+            "idleMaxMs": 360000,
+            "interjectCooldownMs": 25000,
+            "mirrorIdleMs": 1800000,
+            "mirrorInterjectMs": 300000
+        },
+        "autoFarm": true,
+        "farmRadius": 4
+    }
 }
