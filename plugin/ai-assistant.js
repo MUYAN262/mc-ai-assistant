@@ -1629,6 +1629,7 @@ function openMenu (pl) {
     ['§0剩余时间', ''],
     ['§1召唤 / 上线助手', 'textures/items/ender_pearl'],
     ['§1跟随我', ''],
+    ['§1改名', ''],
     ['§0原地停下', ''],
     ['§0跳一下', ''],
     ['§1上浮 / 出水', ''],
@@ -1642,13 +1643,14 @@ function openMenu (pl) {
   buttons.forEach(function (b) { try { form.addButton(b[0], b[1]) } catch (e) { try { form.addButton(b[0]) } catch (e2) {} } })
   pl.sendForm(form, function (player, id) {
     if (id === undefined || id === null || id < 0) return
-    const map = ['购买菜单', '剩余', '召唤', '跟随', '停下', '跳', '上来', '看向我', '商店', '统计', '诊断', '主菜单', '关闭']
+    const map = ['购买菜单', '剩余', '召唤', '跟随', '改名', '停下', '跳', '上来', '看向我', '商店', '统计', '诊断', '主菜单', '关闭']
     const act = map[id]
     if (!act || act === '关闭') { try { player.tell('§b[AI 助手] §f已关闭菜单') } catch (e) {} return }
     if (act === '主菜单') {
       try { player.runcmd('menu') } catch (e) { player.tell('§c[AI 助手] 主菜单打开失败（CMENU 未装或命令被占用）') }
       return
     }
+    if (act === '改名') { try { openRenameForm(player) } catch (e) { player.tell('§c[AI 助手] §f改名面板打不开') } return }
     if (act === '商店') {
       player.tell('§9§m────────────────────────────')
       player.tell('§6§l商城')
@@ -1660,6 +1662,27 @@ function openMenu (pl) {
       return
     }
     try { runAction(player, act, 'toggle') } catch (e) { audit('ERROR', '菜单动作异常: ' + e.message) }
+  })
+}
+
+function openRenameForm (pl) {
+  let form
+  try { form = mc.newCustomForm() } catch (e) { pl.tell('§c[AI 助手] §f当前版本不支持表单，请在聊天里说：' + CFG.assistantName + ' 改名 新名字'); return }
+  const cur = (itemFor(pl) && itemFor(pl).name) || residentName()
+  form.setTitle('§l§1✦ 给助手改名 ✦')
+  form.addLabel('§1当前名字 §8| §0' + cur)
+  form.addLabel('§1规则 §8| §01-8 个字符，不能带空格和符号；中文最多 8 个字')
+  form.addInput('§1新名字', '留空就是取消', cur)
+  pl.sendForm(form, function (player, data) {
+    if (!data) return
+    const raw = String(data[0] || '').trim()
+    if (!raw || raw === cur) { player.tell('§b[AI 助手] §f名字没变'); return }
+    let r
+    const it = itemFor(player)
+    if (it) r = renameOwnAssistant(player, raw)
+    else r = renameResident(raw, player.realName)
+    if (r && r.ok) { try { player.tell('§b[AI 助手] §a' + r.msg) } catch (e) {} say('叫我' + (r.msg.replace(/^.*叫/, '') || raw) + '也行呀', 'interject') }
+    else player.tell('§c[AI 助手] §f' + ((r && r.msg) || '改名失败了'))
   })
 }
 
@@ -1725,7 +1748,7 @@ if (CFG.resident.enabled) {
   mc.listen('onJoin', function () { try { ensureResident() } catch (e) {} })
   audit('RESIDENT', '常驻模式已启用：' + residentName() + '，免费聊天=' + CFG.resident.freeChat + '，可指挥=' + CFG.resident.allowMove)
 }
-audit('START', 'ai-assistant v1.5.0 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
+audit('START', 'ai-assistant v1.7.2 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
 
 
 // ===== v1.5.0 扩展：记忆 / 指令代办 / 死亡提醒 / 危险预警 / 日志问答 / 自动钓鱼 / 经济 / 商城对接 =====

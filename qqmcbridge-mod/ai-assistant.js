@@ -329,9 +329,21 @@ function ensureGameHooks (apiRef, settings) {
 function playerListText (api) {
   let list = []
   try { list = api.getOnlinePlayers() || [] } catch (e) { list = [] }
-  const names = list.map((p) => (p && (p.realName || p.name)) || "?").filter(Boolean)
-  if (!names.length) return "现在服务器里没人。"
-  return "在线 " + names.length + " 人：" + names.join("、")
+  // 只统计真实玩家：模拟玩家（小把罢自己）realName 为空，不能显示成「？」
+  const names = []
+  for (const p of list) {
+    if (!p) continue
+    let n = String(p.realName || p.name || "").trim()
+    if (!n && typeof p.isSimulatedPlayer === "function") {
+      try { if (p.isSimulatedPlayer()) n = "小把罢（助手）" } catch (e) {}
+    }
+    if (n) names.push(n)
+  }
+  const real = names.filter((n) => n !== "小把罢（助手）")
+  if (!real.length) {
+    return names.length ? "现在服务器里没别人，就我在。" : "现在服务器里没人。"
+  }
+  return "在线 " + real.length + " 人：" + real.join("、")
 }
 
 function localCommand (body, context, api, settings) {
@@ -344,6 +356,100 @@ function localCommand (body, context, api, settings) {
   }
   if (/(在线|人数|几个人|多少人|有人吗|有谁)/.test(t) && !/(怎么|为什么|如何|教程)/.test(t))
     return playerListText(api)
+  // ��收行情：回收排行 / 涨价榜 / 行情 / 收什么赚
+  if (/^(回收排行|回收榜|涨价榜|价格榜|行情|收什么赚|什么值钱|最赚钱)$/.test(t)) {
+    try {
+      if (typeof ll === "undefined" || !ll || typeof ll.import !== "function")
+        return "行情功能没接上（ll 接口不可用）。"
+      if (typeof ll.hasExported === "function" && !ll.hasExported("ShoppingMall", "sm_aiTopRecycle"))
+        return "商店插件没开行情接口（需要 sm_aiTopRecycle）。"
+      const top = JSON.parse(ll.import("ShoppingMall", "sm_aiTopRecycle")(8) || "{}")
+      if (!top.ok) return "取行情失败：" + (top.msg || "未知原因")
+      const items = top.items || []
+      if (!items.length) return "官方回收表是空的，暂时没有行情。"
+      const out = []
+      out.push(top.mode === "up"
+        ? "===== 回收涨价榜（前 " + items.length + "）====="
+        : "===== 回收价排行（前 " + items.length + "）=====")
+      items.forEach(function (x, i) {
+        const unitPart = x.perCount > 1 ? "，每 " + x.perCount + " 个算 1 份（约 " + x.unit + "/个）" : ""
+        if (x.pct > 0) {
+          out.push(" " + (i + 1) + ". " + x.name + " — 现价 " + x.now + "（原价 " + x.orig + "，+" + x.pct + "%）" + unitPart)
+        } else {
+          out.push(" " + (i + 1) + ". " + x.name + " — " + x.now + " 金币/份" + unitPart)
+        }
+      })
+      out.push(top.mode === "up"
+        ? "提示：现价会比原价跌回去，趁高出手；囤多了记得分批卖。"
+        : "提示：当前没有涨价物品，按原价收，榜单按单价排的。")
+      return out.join("\n")
+    } catch (e) { return "取行情出错了：" + e.message }
+  }
+  // 商店查价：查价 钻石 / 价格 铁锭 / 回收价 小麦
+  const priceQuery = /^(?:查价|价格|多少|多少收|回收价|收购价)\s*([^\s]+)$/.exec(t)
+  if (priceQuery) {
+    const kw = priceQuery[1]
+    try {
+      if (typeof ll === "undefined" || !ll || typeof ll.import !== "function")
+        return "查价功能没接上（ll 接口不可用）。"
+      if (typeof ll.hasExported === "function" && !ll.hasExported("ShoppingMall", "sm_aiQuery"))
+        return "商店插件没开查价接口（版本或加载顺序问题）。"
+      const q = ll.import("ShoppingMall", "sm_aiQuery")
+      const buy = JSON.parse(q(kw, "buy") || "{}")
+      const sell = JSON.parse(q(kw, "sell") || "{}")
+      const buyItems = (buy.ok && buy.items) ? buy.items : []
+      const sellItems = (sell.ok && sell.items) ? sell.items : []
+      if (!buyItems.length && !sellItems.length)
+        return "商店里没找到「" + kw + "」，换个关键词试试（比如只打「钻」「铁」「面包」）。"
+      const CAP = 10
+      const lines = ["===== 查价：" + kw + " ====="]
+      if (buyItems.length) {
+        lines.push("【购买】你花钱买（共 " + buyItems.length + " 项）")
+        buyItems.slice(0, CAP).forEach(function (x) {
+          lines.push("  " + x.name + " — " + x.price + " 金币/个" +
+            (x.quantity === -1 ? "（不限量）" : (x.quantity > 0 ? "（剩 " + x.quantity + "）" : "（已售罄）")))
+        })
+        if (buyItems.length > CAP) lines.push("  …还有 " + (buyItems.length - CAP) + " 项，关键词再具体点")
+      } else {
+        lines.push("【购买】官方商店不卖这个")
+      }
+      if (sellItems.length) {
+        lines.push("【回收】你卖给它（共 " + sellItems.length + " 项）")
+        sellItems.slice(0, CAP).forEach(function (x) {
+          const orig = Number(x.originalPrice)
+          const now = Number(x.dynamicPrice === undefined ? x.price : x.dynamicPrice)
+          let p
+          if (isFinite(orig) && isFinite(now) && orig !== now) {
+            const pct = orig > 0 ? Math.round(((now - orig) / orig) * 100) : 0
+            p = "原价 " + orig + " → 现价 " + now + "（" + (pct >= 0 ? "+" : "") + pct + "%）"
+          } else {
+            p = now + " 金币/个（原价）"
+          }
+          if (x.perCount > 1) p += "，每 " + x.perCount + " 个算 1 份"
+          lines.push("  " + x.name + " — " + p)
+        })
+        if (sellItems.length > CAP) lines.push("  …还有 " + (sellItems.length - CAP) + " 项")
+      } else {
+        lines.push("【回收】官方商店不收这个")
+      }
+      // 附一段“现在收什么最划算”，让玩家知道该去攒什么
+      try {
+        if (typeof ll.hasExported !== "function" || ll.hasExported("ShoppingMall", "sm_aiTopRecycle")) {
+          const top = JSON.parse(ll.import("ShoppingMall", "sm_aiTopRecycle")(3) || "{}")
+          if (top.ok && top.items && top.items.length) {
+            lines.push(top.mode === "up" ? "【行情】现在回收涨得最凶的" : "【行情】回收价最高的")
+            top.items.forEach(function (x, i) {
+              const unitPart = (x.perCount > 1) ? "（约 " + x.unit + "/个）" : ""
+              lines.push("  " + (i + 1) + ". " + x.name + " — " +
+                (x.pct > 0 ? "现价 " + x.now + "+" + x.pct + "%" + unitPart : x.unit + " 金币/个" + unitPart))
+            })
+            lines.push("  想看完整的就发「回收排行」")
+          }
+        }
+      } catch (e2) {}
+      return lines.join("\n")
+    } catch (e) { return "查价出错了：" + e.message }
+  }
   if (/^(状态|服务器状态|tps|性能)$/.test(low)) {
     try { return String(api.getServerStatusMessage() || playerListText(api)) } catch (e) { return playerListText(api) }
   }
@@ -400,7 +506,12 @@ module.exports.handleQQ = function (context) {
     const addressed = sp.hit || Boolean(context.replyEnabled)
     const body = sp.body || raw
 
-    // 1) 闸门
+    // 1) 本地只读命令（查价 / 在线 / 时间 / 状态 / 余额 / 查人 / 公告…）
+    //    必须排在「有没有 @」的闸门之前：群里直接打「查价 钻石」也要能回。
+    const local = localCommand(body, context, apiRef, settings)
+    if (local) return local
+
+    // 2) 闸门
     const question = looksLikeQuestion(body)
     if (mode === "half" && !addressed) return ""
     if (mode === "smart" && !addressed && !question) return ""
@@ -432,10 +543,6 @@ module.exports.handleQQ = function (context) {
       }
       return ""
     }
-
-    // 2) 本地只读命令
-    const local = localCommand(body, context, apiRef, settings)
-    if (local) return local
 
     // 3) FAQ 精确匹配
     const faqHit = matchFaq(body, settings.faq_path || DEFAULT_FAQ)
