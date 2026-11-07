@@ -211,11 +211,26 @@ function assistantNameFor (player) {
 }
 function liveCount () { return Object.keys(live).length }
 
+// 服务器里正在线的助手总数：付费的 + 常驻的那个（常驻也算一个名额）
+function assistantTotal () {
+  let n = 0
+  try { Object.keys(live).forEach(function (k) { const it = live[k]; if (it && aliveSp(it.sp)) n++ }) } catch (e) {}
+  try { if (CFG.resident && CFG.resident.enabled && residentAlive()) n++ } catch (e) {}
+  return n
+}
+
+// 付费助手能用的名额：常驻在场就给它留一个位置
+function paidSlotCap () {
+  const max = Number(CFG.limits.maxAssistants) || 3
+  const reserve = (CFG.resident && CFG.resident.enabled) ? 1 : 0
+  return Math.max(1, max - reserve)
+}
+
 function spawnAssistant (player) {
   const e = ensureEntry(player)
   if (live[keyOf(player)] && live[keyOf(player)].sp && aliveSp(live[keyOf(player)].sp)) return { ok: false, msg: '助手已经在你身边了' }
   if (live[keyOf(player)]) { try { dropEntity(live[keyOf(player)].sp) } catch (e0) {} delete live[keyOf(player)] }
-  if (liveCount() >= CFG.limits.maxAssistants) return { ok: false, msg: '服务器里助手数量已满（' + CFG.limits.maxAssistants + '），稍后再试' }
+  if (liveCount() >= paidSlotCap() || assistantTotal() >= CFG.limits.maxAssistants) return { ok: false, msg: '§e服务器里最多同时 ' + CFG.limits.maxAssistants + ' 个助手（含常驻的 §b' + residentName() + '§e），现在满了，等别人下线再试' }
   const pos = player.pos
   let name = assistantNameFor(player)
   const bx = Math.floor(pos.x) + 1
@@ -1178,7 +1193,7 @@ cmdAdmin.setCallback((_cmd, origin, output, res) => {
   const reply = (s) => { try { output.success(s) } catch (e) { console.log(s) } }
 
   if (action === 'status') {
-    reply('助手在线 ' + liveCount() + '/' + CFG.limits.maxAssistants + '；付费玩家 ' + Object.keys(state.players).length + '；模型 key ' + (LLM_KEY ? '已加载' : '缺失') + '；动作白名单 ' + ALLOWED_SIM.join(','))
+    reply('助手在线 ' + assistantTotal() + '/' + CFG.limits.maxAssistants + '（含常驻）' + '；付费玩家 ' + Object.keys(state.players).length + '；模型 key ' + (LLM_KEY ? '已加载' : '缺失') + '；动作白名单 ' + ALLOWED_SIM.join(','))
     return
   }
   if (action === 'grant') {
@@ -1753,7 +1768,7 @@ if (CFG.resident.enabled) {
   mc.listen('onJoin', function () { try { ensureResident() } catch (e) {} })
   audit('RESIDENT', '常驻模式已启用：' + residentName() + '，免费聊天=' + CFG.resident.freeChat + '，可指挥=' + CFG.resident.allowMove)
 }
-audit('START', 'ai-assistant v1.7.6 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
+audit('START', 'ai-assistant v1.7.7 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
 
 
 // ===== v1.5.0 扩展：记忆 / 指令代办 / 死亡提醒 / 危险预警 / 日志问答 / 自动钓鱼 / 经济 / 商城对接 =====
