@@ -1607,38 +1607,36 @@ function openMenu (pl) {
   try { form = mc.newSimpleForm() } catch (e) { pl.tell('§c[AI 助手] 当前版本不支持表单，请用 /ai 帮助'); return }
   const item = itemFor(pl)
   const ms = remainingMs(pl)
-    const DIV = '§8§m                                        §r'
+  const DIV = '§9§m                                        §r'
   const lines = []
   lines.push(DIV)
-  lines.push('§1§l状态')
-  lines.push(' §1服务 §8|§0 ' + (ms > 0 ? '剩余 ' + fmtMin(ms) : '未购买') + ' §8(' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟)')
+  lines.push('§e§l状态')
+  lines.push(' §b服务 §8|§f ' + (ms > 0 ? '剩余 ' + fmtMin(ms) : '未购买') + ' §9(' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟)')
   const money = moneyOf(pl)
-  lines.push(' §1余额 §8|§6 ' + (money === null ? '读取不到（点诊断）' : money + ' ' + CFG.price.currency))
-  lines.push(' §1助手 §8|§0 ' + (item
-    ? item.name + ' ' + (item.mode === 'follow' ? '§2[跟随中]' : '§6[待命]')
-    : '§4未召唤'))
-  lines.push(' §1在线 §8|§0 ' + mc.getOnlinePlayers().length + ' 人   §1常驻 §8| ' + (residentAlive() ? '§2在线' : '§4不在'))
+  lines.push(' §b余额 §8|§e ' + (money === null ? '读取不到（点诊断）' : money + ' ' + CFG.price.currency))
+  lines.push(' §b助手 §8|§f ' + (item
+    ? item.name + ' ' + (item.mode === 'follow' ? '§a[跟随中]' : '§e[待命]')
+    : '§e未召唤'))
+  lines.push(' §b在线 §8|§f ' + mc.getOnlinePlayers().length + ' 人   §b常驻 §8| ' + (residentAlive() ? '§a在线' : '§c不在'))
   lines.push(DIV)
-  lines.push('§0点按钮操作 · 或直接说 §1「' + CFG.assistantName + ' 跟随」')
-  form.setTitle('§l§1✦ AI 助手 ✦')
+  lines.push('§e点按钮操作 · 或聊天直接说 §f「' + CFG.assistantName + ' 跟随」')
+  form.setTitle('§l§b✦ AI 助手 ✦')
   form.setContent(lines.join('\n'))
-  const on = function (v) { return v ? '§a' : '§e' }
-  const flip = function (v) { return v ? '§c关' : '§a开' }
   const buttons = [
-    ['§2§l购买时长', 'textures/items/gold_ingot'],
-    ['§0剩余时间', ''],
-    ['§1召唤 / 上线助手', 'textures/items/ender_pearl'],
-    ['§1跟随我', ''],
-    ['§1改名', ''],
-    ['§0原地停下', ''],
-    ['§0跳一下', ''],
-    ['§1上浮 / 出水', ''],
-    ['§0看向我', 'textures/items/ender_eye'],
+    ['§a§l购买时长', 'textures/items/gold_ingot'],
+    ['§f剩余时间', ''],
+    ['§b召唤 / 上线助手', 'textures/items/ender_pearl'],
+    ['§b跟随我', ''],
+    ['§d改名', 'textures/items/name_tag'],
+    ['§f原地停下', ''],
+    ['§f跳一下', ''],
+    ['§b上浮 / 出水', ''],
+    ['§f看向我', 'textures/items/ender_eye'],
     ['§6商店查价 / 买卖', 'textures/items/emerald'],
-    ['§5我的统计', 'textures/items/book_writable'],
-    ['§0诊断信息', ''],
-    ['§1返回主菜单', ''],
-    ['§4§l关闭', 'textures/blocks/barrier']
+    ['§d我的统计', 'textures/items/book_writable'],
+    ['§f诊断信息', ''],
+    ['§9返回主菜单', 'textures/ui/icon_import'],
+    ['§c关闭', 'textures/blocks/barrier']
   ]
   buttons.forEach(function (b) { try { form.addButton(b[0], b[1]) } catch (e) { try { form.addButton(b[0]) } catch (e2) {} } })
   pl.sendForm(form, function (player, id) {
@@ -1646,11 +1644,11 @@ function openMenu (pl) {
     const map = ['购买菜单', '剩余', '召唤', '跟随', '改名', '停下', '跳', '上来', '看向我', '商店', '统计', '诊断', '主菜单', '关闭']
     const act = map[id]
     if (!act || act === '关闭') { try { player.tell('§b[AI 助手] §f已关闭菜单') } catch (e) {} return }
+    if (act === '改名') { try { openRenameForm(player) } catch (e) { player.tell('§c[AI 助手] 改名表单打不开') } return }
     if (act === '主菜单') {
       try { player.runcmd('menu') } catch (e) { player.tell('§c[AI 助手] 主菜单打开失败（CMENU 未装或命令被占用）') }
       return
     }
-    if (act === '改名') { try { openRenameForm(player) } catch (e) { player.tell('§c[AI 助手] §f改名面板打不开') } return }
     if (act === '商店') {
       player.tell('§9§m────────────────────────────')
       player.tell('§6§l商城')
@@ -1664,25 +1662,27 @@ function openMenu (pl) {
     try { runAction(player, act, 'toggle') } catch (e) { audit('ERROR', '菜单动作异常: ' + e.message) }
   })
 }
-
 function openRenameForm (pl) {
+  if (!pl) return
+  const item = itemFor(pl)
+  const cur = item ? item.name : residentName()
   let form
-  try { form = mc.newCustomForm() } catch (e) { pl.tell('§c[AI 助手] §f当前版本不支持表单，请在聊天里说：' + CFG.assistantName + ' 改名 新名字'); return }
-  const cur = (itemFor(pl) && itemFor(pl).name) || residentName()
-  form.setTitle('§l§1✦ 给助手改名 ✦')
-  form.addLabel('§1当前名字 §8| §0' + cur)
-  form.addLabel('§1规则 §8| §01-8 个字符，不能带空格和符号；中文最多 8 个字')
-  form.addInput('§1新名字', '留空就是取消', cur)
+  try { form = mc.newCustomForm() } catch (e) { pl.tell('§c[AI 助手] 当前版本不支持表单'); return }
+  form.setTitle('§l§b✦ 给助手改个名字 ✦')
+  form.addInput('§b新名字 §8（留空就取消）', '§f2-12 个字，别带颜色符', cur)
   pl.sendForm(form, function (player, data) {
-    if (!data) return
-    const raw = String(data[0] || '').trim()
-    if (!raw || raw === cur) { player.tell('§b[AI 助手] §f名字没变'); return }
+    if (!data || !data[0]) { try { player.tell('§b[AI 助手] §f没改，还是叫 ' + cur) } catch (e) {} return }
+    const raw = cleanName(String(data[0]))
+    if (!raw) { player.tell('§c[AI 助手] 这名字不太行，换一个'); return }
     let r
-    const it = itemFor(player)
-    if (it) r = renameOwnAssistant(player, raw)
+    if (item) r = renameOwnAssistant(player, raw)
     else r = renameResident(raw, player.realName)
-    if (r && r.ok) { try { player.tell('§b[AI 助手] §a' + r.msg) } catch (e) {} say('叫我' + (r.msg.replace(/^.*叫/, '') || raw) + '也行呀', 'interject') }
-    else player.tell('§c[AI 助手] §f' + ((r && r.msg) || '改名失败了'))
+    if (r && r.ok !== false) {
+      try { player.tell('§b[AI 助手] §f以后我就叫「' + (r.name || raw) + '」了') } catch (e) {}
+      try { say('叫我' + (r.name || raw) + '也行呀', 'interject') } catch (e) {}
+    } else {
+      try { player.tell('§c[AI 助手] 改名失败：' + ((r && r.msg) || '未知原因')) } catch (e) {}
+    }
   })
 }
 
@@ -2006,6 +2006,13 @@ function runSafeCmd (cmd) {
 // ---------- 9. 聊天里的扩展意图 ----------
 function handleExtIntent (player, hit) {
   try {
+    // [PATCH] 排行优先：否则「回收排行」会被「卖/回收」分支当成要卖一个叫“排行”的东西
+    if (/^(回收排行|回收榜|涨价榜|价格榜|行情榜|行情|什么值钱|最赚钱)\/?(\d+)?$/.test(hit.trim())) {
+      const n = Math.max(1, Math.min(20, parseInt((hit.match(/(\d+)/) || [])[1], 10) || 8))
+      const txt = recycleTopText(n, false)
+      player.tell(txt || '§b[商城] §f回收行情暂时读不到（商店没配回收价？）')
+      return true
+    }
     let m = /^(?:买|购买|buy)\s*(\S+?)(?:\s*(?:x|×|\*)?\s*(\d+))?$/i.exec(hit)
     if (m) {
       const kw = m[1], qty = m[2] ? parseInt(m[2], 10) : 1
