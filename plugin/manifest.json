@@ -1,13 +1,13 @@
 {
-  "entry": "ai-assistant.js",
-  "name": "ai-assistant",
-  "type": "lse-nodejs",
-  "author": "dsh",
-  "description": "小鲸 · LSE 大模型陪玩插件：常驻助手、跟随、环境感知聊天、商店查价、私人记忆、行为统计",
-  "version": "1.7.4",
-  "dependencies": [
-    {
-      "name": "legacy-script-engine-nodejs"
-    }
-  ]
+    "entry": "ai-assistant.js",
+    "name": "ai-assistant",
+    "type": "lse-nodejs",
+    "author": "dsh",
+    "description": "小鲸 · LSE 大模型陪玩插件：常驻助手、跟随、环境感知聊天、商店查价、私人记忆、行为统计",
+    "version": "1.7.6",
+    "dependencies": [
+        {
+            "name": "legacy-script-engine-nodejs"
+        }
+    ]
 }

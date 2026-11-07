@@ -1,0 +1,168 @@
+小鲸 AI 助手 · 安装教程
+版本 1.7.6     适用 LeviLamina 26.51.x / 26.60.x + LegacyScriptEngine(nodejs)
+
+========================================
+这个包里有三样东西，按需装
+========================================
+ai-assistant/                  主插件（游戏里的那个小鲸）
+QQMCBridge/mods/ai-assistant/  QQ 群子插件（让它在群里也能说话）
+shoppingmall-hook/             商店对接补丁（可选，装了才能「查价 / 买 / 卖」）
+
+最小可用：只装第一样，游戏里就能跑。
+想在群里说话：再装第二样（需要先装 QQMCBridge）。
+想让它帮你买卖：再装第三样（需要先装 ShoppingMall）。
+
+========================================
+零、前置条件
+========================================
+1. 服务端：LeviLamina 26.51.x 或 26.60.x
+2. 引擎：LegacyScriptEngine 的 nodejs 组件（plugins/legacy-script-engine-nodejs/ 存在即可）
+3. 一个 OpenAI 兼容的大模型接口（本地代理或云上都可以），要能 POST /v1/chat/completions
+4. 可选：QQMCBridge —— https://www.minebbs.com/resources/qqmcbridge.17759/
+5. 可选：ShoppingMall 3.6.x（作者 子邪EVILZIXIE）—— https://www.minebbs.com/resources/sm.9899/
+
+========================================
+一、装主插件（游戏内的小鲸）
+========================================
+1) 把 ai-assistant 整个文件夹放进服务端 plugins 目录，最终长这样：
+   plugins/ai-assistant/ai-assistant.js
+   plugins/ai-assistant/manifest.json
+   plugins/ai-assistant/config.json
+
+2) 打开 plugins/ai-assistant/config.json，至少改这三处：
+   "llm": {
+       "url": "http://127.0.0.1:8788/v1/chat/completions",   <- 你的接口地址，注意要带 /chat/completions
+       "model": "deepseek-v4.1-flash",                        <- 你的模型名
+       "keyFile": "plugins/ai-assistant/llm.key"              <- 如果要鉴权，在插件目录建 llm.key，里面只写 key 一行
+   }
+   不想用文件放 key，也可以把 "keyFile" 换成 "apiKey": "你的key"。
+
+3) 想让它常驻（不用买时长也能在服里看见它）：
+   "resident": { "enabled": true, "name": "小鲸", ... }
+   想让它只在有人花金币召唤时出现，就把 enabled 改成 false。
+
+4) 改名字：把 assistantName 和 resident.name 改成你想要的名字，
+   同时把 triggers 里改成你的名字，例如 ["小鲸","@小鲸","!ai"]。
+
+5) 重启服务器。控制台出现下面这行就算成功：
+   [ai-assistant] ai-assistant v1.7.6 已加载
+
+6) 进游戏测试：
+   聊天框发「小鲸 在吗」          -> 它会回话
+   聊天框发「小鲸 菜单」          -> 打开图形菜单（购买时长/召唤/跟随/商店/统计…）
+   也可以直接输入 /ai 菜单
+
+========================================
+二、装 QQ 群子插件（群里的那只）
+========================================
+前提：服务端已装好 QQMCBridge 并且机器人已经在线。
+
+1) 把 QQMCBridge 整个文件夹里的 mods/ai-assistant 放到：
+   plugins/QQMCBridge/mods/ai-assistant/
+   最终：plugins/QQMCBridge/mods/ai-assistant/ai-assistant.js
+
+2) 打开 plugins/QQMCBridge/mods/ai-assistant/config.json，改 settings 里的：
+   "api": {
+       "base_url": "http://127.0.0.1:8788/v1",     <- 同一个模型接口，注意这里不要带 /chat/completions
+       "model": "deepseek-v4.1-flash",
+       "api_key": "你的key"                         <- 接口不需要鉴权就留空
+   }
+   顺便按喜好调：
+       "mode": "chatty"          smart=只在被叫到时说话，chatty=偶尔自己搭话
+       "chatterChance": 0.05     自己接话的概率，嫌吵就调低或设 0
+       "groupCooldown": 600      群内两次主动说话的最小间隔（秒）
+       "triggers": "小鲸,@小鲸,!,！"
+
+3) 重启服务器。日志里出现：
+   子插件已加载：ai-assistant
+   以及群插件那边的 [QQMCBridge] 正常加载提示。
+
+4) 群里测试：
+   @小鲸 在吗            -> 它会回
+   @小鲸 在线            -> 报服务器在线人数
+   @小鲸 查价 钻石        -> 需要装了第三部分（商店补丁）
+   @小鲸 行情            -> 回收涨幅榜，同样需要商店补丁
+
+   如果 @ 了没反应，先看两处：
+   a. 机器人是否在线（QQMCBridge 的日志里有没有收到群消息）
+   b. 这个子插件是否真的加载了（日志里搜 ai-assistant）
+
+========================================
+三、装商店补丁（可选，让它可以查价/买卖）
+========================================
+为什么需要：ShoppingMall 本身没有对外接口，小鲸拿不到价目表，
+所以只能往它的源码末尾追加一小段转发入口（只追加，不改原逻辑）。
+
+1) 确认 plugins/ShoppingMall/ShoppingMall.js 存在。
+
+2) 在这个包的 shoppingmall-hook 目录里执行（路径换成你自己的）：
+   node apply-hook.js "D:/bedrock/plugins/ShoppingMall/ShoppingMall.js"
+
+   脚本会做三件事：检查是不是已经打过补丁（重复运行不会叠加）、
+   把原文件备份成 ShoppingMall.js.bak-aihook-日期、在末尾追加钩子。
+
+3) 重启服务器，日志里出现：
+   [ShoppingMall] [AI 接口] 已开放 sm_aiQuery / sm_aiBuy / sm_aiSell
+
+4) 游戏里测试：
+   查价 钻石            -> 显示收购价 / 出售价（有动态价也会标出来）
+   买 面包 3            -> 直接扣钱并把东西放进背包
+   卖 钻石 5            -> 按回收价结算
+   行情                 -> 回收涨价格前 8 名
+
+   注意：以后升级 ShoppingMall 会整文件覆盖，补丁会被冲掉，
+   重跑一次 apply-hook.js 就回来了。
+
+========================================
+四、装完自检清单
+========================================
+[ ] 控制台有 ai-assistant v1.7.6 已加载
+[ ] 游戏里「鲸 菜单」能打开图形菜单，图标正常、字看得清
+[ ] 「小鲸 跟随」它能跟上来（跟丢就再喊一次）
+[ ] 「查价 面包」能报出价格（需第三部分）
+[ ] 群里 @ 它能回（需第二部分 + 机器人在线）
+[ ] 控制台没有反复刷 ai-assistant 的报错
+
+出错先看 plugins/ai-assistant/logs/audit.log，里面按行记了
+每次对话、每次动作的成败，报错也会写进去。
+
+========================================
+五、常见问题
+========================================
+Q: 模型不回复 / 回了空话
+A: 先确认 llm.url 末尾带 /chat/completions；再确认接口本身能通
+   （浏览器或 curl 直接请求一下）。如果模型是带思考过程的，
+   把 maxTokens 调大到 1200 以上，不然思考会把预算吃光。
+
+Q: 它不动、也不说话
+A: 看 audit.log 有没有 [SPAWN] / [CHAT] 记录。没有的话多半是
+   resident.enabled 是 false，或者配置文件 JSON 写坏了（少逗号）。
+
+Q: 群里 @ 了不理人
+A: 三件事依次排查：机器人是否在线 -> 子插件是否加载 ->
+   子插件 config 里的 api 是否填对。
+
+Q: 查价说没装商城
+A: 第三部分没装，或者装完没重启。
+
+Q: 菜单图标是花屏 / 灰字看不见
+A: 1.7.5 之前的老版本有这问题，更新到 1.7.6 即可。
+
+Q: 它能给物品 / 改模式 / 传送吗
+A: 不能，而且是有意做成不能。它只有聊天、移动、跟随、看一眼这些动作，
+   拿不到任何管理权限。
+
+========================================
+六、卸载
+========================================
+删掉 plugins/ai-assistant 即可；
+群功能再删 plugins/QQMCBridge/mods/ai-assistant；
+商店补丁用同目录的备份文件 ShoppingMall.js.bak-aihook-* 覆盖回去，或重装一次 ShoppingMall。
+
+========================================
+许可与致谢
+========================================
+本插件原创，MIT 许可，可自由使用与二次修改（请保留出处）。
+商店对接参考并调用了 ShoppingMall（作者 子邪EVILZIXIE）的官方商店数据与买卖流程，
+没有修改它的价格、税率、库存逻辑；本包不附带 ShoppingMall 本体。
+灵感参考：IK_SmartAI（作者 I IKUN2004）。

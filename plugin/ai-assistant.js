@@ -1753,7 +1753,7 @@ if (CFG.resident.enabled) {
   mc.listen('onJoin', function () { try { ensureResident() } catch (e) {} })
   audit('RESIDENT', '常驻模式已启用：' + residentName() + '，免费聊天=' + CFG.resident.freeChat + '，可指挥=' + CFG.resident.allowMove)
 }
-audit('START', 'ai-assistant v1.7.2 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
+audit('START', 'ai-assistant v1.7.6 已加载：价格 ' + CFG.price.perMinute + '/' + CFG.price.currency + ' 每分钟，助手 ' + CFG.assistantName + '（可改名），常驻 ' + residentName() + '，动作白名单 ' + ALLOWED_SIM.length + ' 项')
 
 
 // ===== v1.5.0 扩展：记忆 / 指令代办 / 死亡提醒 / 危险预警 / 日志问答 / 自动钓鱼 / 经济 / 商城对接 =====
