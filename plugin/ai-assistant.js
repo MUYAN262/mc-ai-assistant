@@ -660,7 +660,7 @@ function handleMoveIntent (pl, text) {
   const t = String(text || '').trim()
   const item = itemFor(pl)
   if (/^(召唤|出来|过来吧|spawn)$/.test(t)) {
-    if (remainingMs(pl) <= 0) { pl.tell('§c[AI 助手] 你还没有有效服务，先 /ai 购买 <分钟>'); return true }
+    if (remainingMs(pl) <= 0) { pl.tell('§c[AI 助手] §f你还没有服务时长——按 §b/ai 菜单 §f点「§a购买时长§f」买（' + CFG.price.perMinute + ' 金币/分钟）'); return true }
     const r = spawnAssistant(pl)
     pl.tell((r.ok ? '§a' : '§c') + '[AI 助手] ' + r.msg)
     return true
@@ -761,7 +761,7 @@ function dropEntity (sp) {
 function renameOwnAssistant (player, rawName) {
   const k = keyOf(player)
   const item = live[k]
-  if (!item || !item.sp) return { ok: false, msg: '你还没有专属助手（先 /ai 购买 <分钟> 再 /ai 召唤）' }
+  if (!item || !item.sp) return { ok: false, msg: '你还没有专属助手（先在 /ai 菜单 里点「购买时长」买时长，再点「召唤 / 上线助手」）' }
   const name = cleanName(rawName)
   if (!name) return { ok: false, msg: '名字要 1-8 个字符，别带空格和符号' }
   if (name === item.name) return { ok: false, msg: '我现在就叫' + name + '，没变' }
@@ -1048,7 +1048,7 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
     pl.tell('§b§l✦ AI 助手 ✦ §8v1.5.0  §7买时长 · 指挥 · 商店 · 记忆')
     H('§e§l基础')
     L('/ai 菜单', '§a图形菜单（推荐，所有功能都在里面）')
-    L('/ai 购买 <分钟>', '用' + CFG.price.currency + '买服务时长（' + CFG.price.perMinute + '/分钟，最少 ' + CFG.price.minMinutes + '）')
+    L('/ai 菜单 → 购买时长', '用' + CFG.price.currency + '买服务时长（' + CFG.price.perMinute + '/分钟，最少 ' + CFG.price.minMinutes + '）；也可以在聊天里说「' + CFG.assistantName + ' 买 30」')
     L('/ai 剩余', '看服务剩余时间')
     H('§b§l指挥')
     L('/ai 召唤', '把助手叫到身边')
@@ -1084,7 +1084,7 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
 
   if (action === '剩余' || action === 'balance') {
     const ms = remainingMs(pl)
-    pl.tell('§b[AI 助手] ' + (ms > 0 ? '专属服务剩余 ' + fmtMin(ms) : '你还没有购买专属服务（/ai 购买 <分钟>）'))
+    pl.tell('§b[AI 助手] ' + (ms > 0 ? '专属服务剩余 ' + fmtMin(ms) : '你还没有购买专属服务（按 /ai 菜单 点「购买时长」）'))
     if (CFG.resident.enabled && residentAlive()) pl.tell('§7公共' + residentName() + '一直在线，聊天和指挥都免费')
     return
   }
@@ -1098,8 +1098,8 @@ cmdAi.setCallback((_cmd, origin, output, res) => {
 
   if (action === '召唤' || action === 'spawn') {
     if (remainingMs(pl) <= 0) {
-      if (CFG.resident.enabled && residentAlive()) { pl.tell('§a[AI 助手] 公共' + residentName() + '已经在场上了，直接说「' + CFG.assistantName + ' 过来」或「' + CFG.assistantName + ' 跟随」；想要专属的再 /ai 购买 <分钟>') ; return }
-      pl.tell('§c[AI 助手] 你还没有有效服务，先 /ai 购买 <分钟>'); return
+      if (CFG.resident.enabled && residentAlive()) { pl.tell('§a[AI 助手] 公共' + residentName() + '已经在场上了，直接说「' + CFG.assistantName + ' 过来」或「' + CFG.assistantName + ' 跟随」；想要专属的再按 /ai 菜单 点「购买时长」买') ; return }
+      pl.tell('§c[AI 助手] §f你还没有服务时长——按 §b/ai 菜单 §f点「§a购买时长§f」买（' + CFG.price.perMinute + ' 金币/分钟）'); return
     }
     const r = spawnAssistant(pl)
     pl.tell((r.ok ? '§a' : '§c') + '[AI 助手] ' + r.msg)
@@ -1342,7 +1342,7 @@ mc.listen('onChat', (player, msg) => {
     const ms = remainingMs(player)
     const free = CFG.resident.enabled && CFG.resident.freeChat && residentAlive()
     if (ms <= 0 && !free) {
-      player.tell('§e[AI 助手] 服务需要购买：/ai 购买 <分钟>（' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟）')
+      player.tell('§e[AI 助手] 先买时长：按 §b/ai 菜单 §e点「§a购买时长§e」（' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟）')
       return true
     }
     // 聊天里开菜单：小把罢 菜单
@@ -1555,6 +1555,11 @@ function toggleFlag (pl, item, key, label, arg) {
 
 // ---------- GUI 菜单 ----------
 function runAction (pl, action, arg) {
+  if (action === '购买' || action === 'buy') {
+    const mm = parseInt(String(arg || '').replace(/[^0-9]/g, ''), 10)
+    if (mm > 0) { const r = purchase(pl, mm); pl.tell((r.ok ? '§a' : '§c') + '[AI 助手] ' + (r.msg || (r.ok ? '买好了' : '没买成'))); return }
+    return openBuyForm(pl)
+  }
   if (action === '购买菜单') return openBuyForm(pl)
   if (action === '菜单') return openMenu(pl)
   if (action === '诊断') return diagnose(pl)
@@ -1589,7 +1594,7 @@ function runAction (pl, action, arg) {
   }
   if (action === '剩余') { pl.tell('§b[AI 助手] ' + (remainingMs(pl) > 0 ? '专属服务剩余 ' + fmtMin(remainingMs(pl)) : '还没有购买专属服务')); return }
   if (action === '召唤') {
-    if (remainingMs(pl) <= 0) { pl.tell('§c[AI 助手] 先 /ai 购买 <分钟>'); return }
+    if (remainingMs(pl) <= 0) { pl.tell('§c[AI 助手] §f先按 §b/ai 菜单 §f点「§a购买时长§f」'); return }
     const r = spawnAssistant(pl); pl.tell((r.ok ? '§a' : '§c') + '[AI 助手] ' + r.msg); return
   }
   if (!item) { pl.tell('§c[AI 助手] 助手不在你身边，先 /ai 召唤'); return }
@@ -1624,17 +1629,17 @@ function openMenu (pl) {
   form.setContent(lines.join('\n'))
   const buttons = [
     ['§a§l购买时长', 'textures/items/gold_ingot'],
-    ['§f剩余时间', ''],
+    ['§f剩余时间', 'textures/items/clock_item'],
     ['§b召唤 / 上线助手', 'textures/items/ender_pearl'],
-    ['§b跟随我', ''],
+    ['§b跟随我', 'textures/items/lead'],
     ['§d改名', 'textures/items/name_tag'],
-    ['§f原地停下', ''],
-    ['§f跳一下', ''],
-    ['§b上浮 / 出水', ''],
+    ['§f原地停下', 'textures/items/string'],
+    ['§f跳一下', 'textures/items/rabbit_foot'],
+    ['§b上浮 / 出水', 'textures/items/snowball'],
     ['§f看向我', 'textures/items/ender_eye'],
     ['§6商店查价 / 买卖', 'textures/items/emerald'],
     ['§d我的统计', 'textures/items/book_writable'],
-    ['§f诊断信息', ''],
+    ['§f诊断信息', 'textures/items/compass_item'],
     ['§9返回主菜单', 'textures/ui/icon_import'],
     ['§c关闭', 'textures/blocks/barrier']
   ]
@@ -1688,7 +1693,7 @@ function openRenameForm (pl) {
 
 function openBuyForm (pl) {
   let form
-  try { form = mc.newCustomForm() } catch (e) { pl.tell('§c[AI 助手] §f当前版本不支持表单，请用 /ai 购买 <分钟>'); return }
+  try { form = mc.newCustomForm() } catch (e) { pl.tell('§c[AI 助手] §f当前版本不支持表单，请用 /ai 菜单'); return }
   form.setTitle('§l§6✦ 购买服务时长 ✦')
   const bal = moneyOf(pl)
   form.addLabel('§9§m                                    §r')
