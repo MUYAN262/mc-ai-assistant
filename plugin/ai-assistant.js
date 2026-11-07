@@ -13,12 +13,12 @@ const STATE_PATH = path.join(STATE_DIR, 'service.json')
 const NAME_PATH = path.join(STATE_DIR, 'names.json')
 
 const DEFAULTS = {
-  assistantName: '小把',
+  assistantName: '小鲸',
   llm: { url: 'http://127.0.0.1:8788/v1/chat/completions', keyFile: 'plugins/ai-assistant/llm.key', model: 'deepseek-v4.1-flash', timeoutMs: 45000, maxTokens: 400 },
   price: { perMinute: 20, minMinutes: 10, maxMinutes: 240, currency: '金币' },
   limits: { chatPer10Min: 20, actionsPerMinute: 30, followStopDistance: 3.0, followSpeed: 0.8, maxAssistants: 3, maxMoveDistance: 48, moveSpeed: 0.9, gotoStopDistance: 2.0 },
-  resident: { enabled: true, name: '小把', freeChat: true, allowMove: true, chatPer10Min: 30, spawn: null, chatter: { enabled: true, chance: 0.45, idleMinMs: 150000, idleMaxMs: 360000, interjectCooldownMs: 25000 } },
-  triggers: ['小把', '@小把', '小鲸', '@小鲸', '!ai'],
+  resident: { enabled: true, name: '小鲸', freeChat: true, allowMove: true, chatPer10Min: 30, spawn: null, chatter: { enabled: true, chance: 0.45, idleMinMs: 150000, idleMaxMs: 360000, interjectCooldownMs: 25000 } },
+  triggers: ['小鲸', '@小鲸', '!ai'],
   auditLog: 'plugins/ai-assistant/logs/audit.log'
 }
 
@@ -1607,44 +1607,42 @@ function openMenu (pl) {
   try { form = mc.newSimpleForm() } catch (e) { pl.tell('§c[AI 助手] 当前版本不支持表单，请用 /ai 帮助'); return }
   const item = itemFor(pl)
   const ms = remainingMs(pl)
-  const DIV = '§9§m                                        §r'
+    const DIV = '§8§m                                        §r'
   const lines = []
   lines.push(DIV)
-  lines.push('§e§l状态')
-  lines.push(' §b服务 §8|§f ' + (ms > 0 ? '剩余 ' + fmtMin(ms) : '未购买') + ' §9(' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟)')
+  lines.push('§1§l状态')
+  lines.push(' §1服务 §8|§0 ' + (ms > 0 ? '剩余 ' + fmtMin(ms) : '未购买') + ' §8(' + CFG.price.perMinute + ' ' + CFG.price.currency + '/分钟)')
   const money = moneyOf(pl)
-  lines.push(' §b余额 §8|§e ' + (money === null ? '读取不到（点诊断）' : money + ' ' + CFG.price.currency))
-  lines.push(' §b助手 §8|§f ' + (item
-    ? item.name + ' ' + (item.mode === 'follow' ? '§a[跟随中]' : '§e[待命]')
-    : '§e未召唤'))
-  if (item) {
-  }
-  lines.push(' §b在线 §8|§f ' + mc.getOnlinePlayers().length + ' 人   §b常驻 §8| ' + (residentAlive() ? '§a在线' : '§c不在'))
+  lines.push(' §1余额 §8|§6 ' + (money === null ? '读取不到（点诊断）' : money + ' ' + CFG.price.currency))
+  lines.push(' §1助手 §8|§0 ' + (item
+    ? item.name + ' ' + (item.mode === 'follow' ? '§2[跟随中]' : '§6[待命]')
+    : '§4未召唤'))
+  lines.push(' §1在线 §8|§0 ' + mc.getOnlinePlayers().length + ' 人   §1常驻 §8| ' + (residentAlive() ? '§2在线' : '§4不在'))
   lines.push(DIV)
-  lines.push('§e点按钮操作 · 或聊天直接说 §f「' + CFG.assistantName + ' 跟随」')
-  form.setTitle('§l§b✦ AI 助手 ✦')
+  lines.push('§0点按钮操作 · 或直接说 §1「' + CFG.assistantName + ' 跟随」')
+  form.setTitle('§l§1✦ AI 助手 ✦')
   form.setContent(lines.join('\n'))
   const on = function (v) { return v ? '§a' : '§e' }
   const flip = function (v) { return v ? '§c关' : '§a开' }
   const buttons = [
-    ['§a§l购买时长', 'textures/items/gold_ingot'],
-    ['§f剩余时间', 'textures/items/clock'],
-    ['§b召唤 / 过来', 'textures/items/ender_pearl'],
-    ['§b跟随我', 'textures/items/lead'],
-    ['§f原地停下', 'textures/items/slime_ball'],
-    ['§f跳一下', 'textures/items/rabbit_foot'],
-    ['§b上浮 / 出水', 'textures/items/water_bucket'],
-    ['§f看向我', 'textures/items/ender_eye'],
+    ['§2§l购买时长', 'textures/items/gold_ingot'],
+    ['§0剩余时间', ''],
+    ['§1召唤 / 上线助手', 'textures/items/ender_pearl'],
+    ['§1跟随我', ''],
+    ['§0原地停下', ''],
+    ['§0跳一下', ''],
+    ['§1上浮 / 出水', ''],
+    ['§0看向我', 'textures/items/ender_eye'],
     ['§6商店查价 / 买卖', 'textures/items/emerald'],
-    ['§d我的统计', 'textures/items/book_writable'],
-    ['§f诊断信息', 'textures/items/compass'],
-    ['§9返回主菜单', 'textures/items/compass'],
-    ['§c关闭', 'textures/blocks/barrier']
+    ['§5我的统计', 'textures/items/book_writable'],
+    ['§0诊断信息', ''],
+    ['§1返回主菜单', ''],
+    ['§4§l关闭', 'textures/blocks/barrier']
   ]
   buttons.forEach(function (b) { try { form.addButton(b[0], b[1]) } catch (e) { try { form.addButton(b[0]) } catch (e2) {} } })
   pl.sendForm(form, function (player, id) {
     if (id === undefined || id === null || id < 0) return
-    const map = ['购买菜单', '剩余', '召唤', '跟随', '停下', '跳', '上来', '看向我', '商店', '统计', '诊断', '关闭']
+    const map = ['购买菜单', '剩余', '召唤', '跟随', '停下', '跳', '上来', '看向我', '商店', '统计', '诊断', '主菜单', '关闭']
     const act = map[id]
     if (!act || act === '关闭') { try { player.tell('§b[AI 助手] §f已关闭菜单') } catch (e) {} return }
     if (act === '主菜单') {
